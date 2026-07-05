@@ -1,20 +1,38 @@
-# Gym Progress Tracker — System Design v1
+# Gym Progress Tracker — System Design v1.2
 
-**Document Status:** Draft v1  
+**Document Status:** Revised Draft v1.2  
 **Source Requirement:** Gym Progress Tracker — Requirement Document v1  
+**Replaces:** Gym Progress Tracker — System Design v1.1  
 **Target Version:** Version 1 MVP  
 **Target Platform:** Android standalone APK  
 **System Type:** Offline-first mobile application  
-**Primary User:** Beginner gym user  
-**Date:** 2026-06-29
+**Date:** 2026-07-05
 
 ---
 
 ## 1. Purpose
 
-This document translates the frozen Requirement Document v1 into a practical system design for the first version of **Gym Progress Tracker**.
+This document defines the revised system design for **Gym Progress Tracker v1**, an offline-first mobile app for recording workouts, tracking exercise progress, recording bodyweight, and protecting local data through JSON export/import backup.
 
-The design focuses on building a simple, fast, offline-first mobile app that can be used during real gym sessions. Version 1 does not include login, backend, cloud sync, AI features, nutrition tracking, social features, or advanced analytics.
+Version 1 remains intentionally simple:
+
+- Android only.
+- Standalone APK as the final runtime.
+- React Native, Expo, TypeScript.
+- SQLite local database.
+- JSON export/import backup.
+- No backend.
+- No login.
+- No cloud sync.
+- No analytics or external tracking.
+
+This v1.2 revision keeps the v1.1 safety model and fixes three additional runtime flaws found during review:
+
+1. Exercise block reordering now avoids immediate `UNIQUE(workout_id, exercise_order)` collisions.
+2. Bodyweight records are explicitly one record per date.
+3. Deleting a set now resequences remaining set numbers safely.
+
+The v1.1 safety decisions remain active: backup transformers, single-active-workout partial unique index, immediate write serialization, transactional set insertion, repeated exercise blocks, and historical backup fixtures.
 
 ---
 
@@ -23,51 +41,52 @@ The design focuses on building a simple, fast, offline-first mobile app that can
 The system design is optimized for these priorities:
 
 1. **Fast workout logging**  
-   The user should be able to record sets quickly during a workout without fighting the UI.
+   The user should be able to record sets quickly during real gym sessions.
 
-2. **Offline-first behavior**  
-   All normal app features must work without internet.
+2. **Immediate data persistence**  
+   Each set must be saved immediately after the user records it. The app must not batch workout logs and save them later.
 
-3. **Immediate data saving**  
-   Each set should be saved immediately after entry, not only at the end of the workout.
+3. **Offline-first behavior**  
+   Normal workout tracking must work without internet access.
 
-4. **Data safety**  
-   The app should protect workout history through SQLite persistence, versioned migrations, and JSON export/import backup.
+4. **Database-backed integrity**  
+   Critical rules should not rely only on UI or service-layer checks. SQLite constraints and transactions must protect important data rules.
 
-5. **Simple architecture**  
-   The app should be structured enough to grow later, but not over-engineered for version 1.
+5. **Backup safety across app updates**  
+   Older backups should remain restorable through backup transformers when the app schema evolves.
 
-6. **Future backend compatibility**  
-   Stable local string IDs and timestamps should make future sync easier if a backend is added later.
+6. **Simple but expandable architecture**  
+   Version 1 should stay buildable, but the structure should not block future backend sync, workout templates, rest timer, or advanced analytics.
 
 ---
 
-## 3. Scope of System Design v1
+## 3. Scope of System Design v1.2
 
 ### Included
 
-- Mobile app architecture
-- Local SQLite database design
-- Feature module structure
-- Navigation structure
-- Core data flows
-- Backup export/import flow
-- Validation strategy
-- Migration strategy
-- Error handling strategy
-- Testing strategy
-- Android APK build strategy
+- Mobile app architecture.
+- Feature-first source code structure.
+- Navigation structure.
+- Local SQLite data access strategy.
+- Database integrity strategy.
+- Workout write concurrency strategy.
+- Backup export/import lifecycle.
+- Backup migration transformer strategy.
+- Validation strategy.
+- Error handling strategy.
+- Testing strategy.
+- Android APK build strategy.
 
 ### Not Included
 
-- Backend architecture
-- Cloud database design
-- Authentication system
-- Multi-user support
-- Online sync conflict resolution
-- AI workout recommendation
-- Advanced analytics
-- Nutrition tracking
+- Backend architecture.
+- Cloud sync conflict resolution.
+- Authentication.
+- Multi-user support.
+- AI workout coach.
+- Nutrition tracking.
+- Social features.
+- Advanced charts and analytics.
 
 ---
 
@@ -76,26 +95,28 @@ The system design is optimized for these priorities:
 Version 1 is a local-only Android mobile app.
 
 ```text
-+-----------------------------+
-|       Android Phone         |
-|                             |
-|  Gym Progress Tracker App   |
-|                             |
-|  +-----------------------+  |
-|  | React Native UI       |  |
-|  +-----------------------+  |
-|  | Feature Logic         |  |
-|  +-----------------------+  |
-|  | Repositories          |  |
-|  +-----------------------+  |
-|  | SQLite Local DB       |  |
-|  +-----------------------+  |
-|                             |
-|  JSON Backup Export/Import  |
-+-----------------------------+
++------------------------------------------------+
+|                 Android Phone                  |
+|                                                |
+|  Gym Progress Tracker                          |
+|                                                |
+|  +------------------------------------------+  |
+|  | React Native Screens                     |  |
+|  +------------------------------------------+  |
+|  | Hooks / View Models                      |  |
+|  +------------------------------------------+  |
+|  | Services / Use Cases                     |  |
+|  +------------------------------------------+  |
+|  | Repositories                             |  |
+|  +------------------------------------------+  |
+|  | SQLite Adapter + Transactions            |  |
+|  +------------------------------------------+  |
+|                                                |
+|  JSON Backup Export / Import                  |
++------------------------------------------------+
 ```
 
-There is no server in version 1. The only external interaction is the user manually exporting or importing a JSON backup file.
+There is no server in v1. The only external interaction is the user manually selecting or sharing a JSON backup file.
 
 ---
 
@@ -104,20 +125,20 @@ There is no server in version 1. The only external interaction is the user manua
 | Layer | Technology | Reason |
 |---|---|---|
 | Mobile framework | React Native | Mobile-first app development |
-| App platform/tooling | Expo | Faster development and Android build workflow |
+| Tooling | Expo | Faster development and build workflow |
 | Language | TypeScript | Safer model, validation, and repository code |
 | Local database | SQLite | Reliable local structured storage |
-| Backup format | JSON | Easy manual export/import and future compatibility |
+| Backup format | JSON | Portable manual backup format |
 | Build tool | EAS Build | Standalone Android APK generation |
-| Final runtime | Android standalone APK | Must not depend on Expo Go |
+| Final runtime | Android standalone APK | Does not depend on Expo Go |
 
-### Likely Expo modules for version 1
+### Likely Expo modules
 
 | Need | Suggested Module | Purpose |
 |---|---|---|
 | SQLite storage | `expo-sqlite` | Local database |
-| Import backup file | `expo-document-picker` | Let user select JSON backup file |
-| Export/share backup file | `expo-file-system` + `expo-sharing` | Create and share/export backup JSON |
+| Import backup file | `expo-document-picker` | Select JSON backup file |
+| Export/share backup file | `expo-file-system` + `expo-sharing` | Create and share backup file |
 
 Exact package versions should be checked during implementation because Expo SDK versions change over time.
 
@@ -125,7 +146,7 @@ Exact package versions should be checked during implementation because Expo SDK 
 
 ## 6. High-Level Architecture
 
-The app should use a simple layered architecture:
+The app should use a simple layered architecture.
 
 ```text
 UI Screens
@@ -136,34 +157,41 @@ Use Cases / Services
   ↓
 Repositories
   ↓
-SQLite Database Adapter
+SQLite Adapter
+  ↓
+SQLite Database
 ```
 
-For backup:
+Backup flow:
 
 ```text
 Settings / Backup Screen
   ↓
 Backup Service
   ↓
+Backup Parser
+  ↓
+Backup Version Transformer
+  ↓
 Backup Validator
   ↓
-Repositories / SQLite Transaction
+SQLite Transaction
   ↓
-JSON File Export or Import
+Replace Local Data
 ```
 
 ### Layer Responsibilities
 
 | Layer | Responsibility |
 |---|---|
-| UI Screens | Render forms, lists, buttons, empty states, confirmation dialogs |
-| Feature Hooks / View Models | Manage screen state, loading state, form state, and call use cases |
-| Use Cases / Services | Apply app rules and coordinate repositories |
-| Repositories | Read/write data from SQLite |
-| Database Adapter | Open database, run migrations, run transactions |
-| Backup Service | Export/import full app data |
-| Validators | Validate form input and backup structure |
+| UI Screens | Render forms, lists, buttons, empty states, and confirmation dialogs. |
+| Hooks / View Models | Manage loading state, form state, screen state, and call services. |
+| Services / Use Cases | Apply app rules and coordinate repositories. |
+| Repositories | Execute database reads and writes. |
+| SQLite Adapter | Open database, run migrations, run explicit transactions. |
+| Backup Service | Export current data and import backup data safely. |
+| Backup Transformers | Convert older backup payloads into the current backup structure. |
+| Validators | Validate forms, backup payloads, and transformed import data. |
 
 ---
 
@@ -178,6 +206,17 @@ src/
       WorkoutStack.tsx
       ExerciseStack.tsx
       SettingsStack.tsx
+
+  database/
+    db.ts
+    migrations/
+      index.ts
+      001_initial_schema.ts
+    seeds/
+      defaultExercises.ts
+    transaction.ts
+    writeQueue.ts
+    errors.ts
 
   features/
     workouts/
@@ -199,6 +238,7 @@ src/
         workoutService.ts
       repositories/
         workoutRepository.ts
+        workoutSetRepository.ts
       types.ts
       validators.ts
 
@@ -218,7 +258,6 @@ src/
         exerciseService.ts
       repositories/
         exerciseRepository.ts
-      defaultExercises.ts
       types.ts
       validators.ts
 
@@ -243,327 +282,694 @@ src/
       services/
         backupExportService.ts
         backupImportService.ts
-        backupValidator.ts
+      transformers/
+        index.ts
+        v1ToV2.ts
+      validators/
+        backupEnvelopeValidator.ts
+        backupDataValidator.ts
+      fixtures/
+        backup-v1-valid.json
+        backup-v1-invalid-multiple-active-workouts.json
       types.ts
-
-  database/
-    database.ts
-    migrations/
-      migration001_initialSchema.ts
-    migrationRunner.ts
-    transaction.ts
-    seedDefaultExercises.ts
 
   shared/
     components/
-      AppButton.tsx
-      AppTextInput.tsx
       ConfirmDialog.tsx
       EmptyState.tsx
       LoadingState.tsx
-    constants/
-      muscleGroups.ts
-      units.ts
     utils/
-      date.ts
       id.ts
+      date.ts
       number.ts
       result.ts
-    errors/
-      AppError.ts
 ```
 
-### Design Note
+### Important rule
 
-The structure is feature-first. Each major feature owns its screens, hooks, services, repositories, types, and validators. Shared UI and utility code stays under `shared/`.
+The `backup/fixtures/` directory must keep example JSON payloads for every historical `backup_version`. These fixtures are part of the app's data-safety contract and should not be deleted when the app evolves.
 
 ---
 
 ## 8. Navigation Design
 
-### Main Tabs
+Recommended structure:
 
 ```text
-Home
-Workouts
-Exercises
-Body
-Settings
+RootNavigator
+  └── MainTabs
+        ├── Home
+        ├── Workouts
+        ├── Exercises
+        ├── Body
+        └── Settings
 ```
 
-### Screen Map
+### Main Screens
 
-| Screen | Access Path | Purpose |
-|---|---|---|
-| Home Screen | Home tab | Quick access to active workout, latest workout, recent progress, latest bodyweight |
-| Start Workout Screen | Home → Start Workout / Continue Workout | Create or continue an active workout |
-| Exercise Selection Screen | Start Workout → Add Exercise | Choose exercise or create custom exercise |
-| Workout History Screen | Workouts tab | View previous workouts newest first |
-| Workout Detail Screen | Workout History → Workout Detail | Review exercises and sets in a workout |
-| Exercise Detail Screen | Exercises → Exercise Detail | View last record, best weight, history |
-| Exercise Management Screen | Exercises tab | Manage default/custom exercises |
-| Body Record Screen | Body tab | Add and review bodyweight records |
-| Settings / Backup Screen | Settings tab | Export/import backup and app info |
+| Screen | Purpose |
+|---|---|
+| Home | Start or continue workout, show latest workout and bodyweight summary. |
+| Start Workout | Create or continue the current active workout. |
+| Exercise Selection | Select exercise to add to the current workout. |
+| Workout History | View previous workouts newest first. |
+| Workout Detail | View exercises and sets from one workout. |
+| Exercise Detail | View last record, best weight, and exercise history. |
+| Exercise Management | Add, edit, archive, or delete custom exercises. |
+| Body Record | Add and review bodyweight records. |
+| Backup Settings | Export and import JSON backup. |
 
 ---
 
-## 9. Data Model Overview
+## 9. Core Domain Model
 
-### Entity Relationship
+### 9.1 Main entities
+
+| Entity | Description |
+|---|---|
+| Exercise | Default or custom exercise. |
+| Workout | A workout session. |
+| Workout Exercise | One exercise block inside a workout. |
+| Workout Set | One set inside a workout exercise block. |
+| Body Record | One bodyweight record. |
+
+### 9.2 Why `workout_exercises` is required
+
+The requirement says the user can add an exercise to a workout and then record sets. If the app only stores `workout_sets`, an exercise would not exist inside the workout until the first set is saved.
+
+That is weak because the user may add an exercise first, then record sets later.
+
+Therefore, v1.1 uses:
 
 ```text
 workouts
-  1 ─── * workout_exercises
-            * ─── 1 exercises
-
-workouts
-  1 ─── * workout_sets
-            * ─── 1 exercises
-
-body_records
-  independent table
+  → workout_exercises
+      → workout_sets
 ```
 
-### Important Design Addition: `workout_exercises`
+This allows:
 
-The Requirement Document defines `workout_sets`, but it does not define a table for an exercise that has been added to a workout before any set has been recorded.
+- Exercise blocks with zero sets.
+- Exercise order inside the workout.
+- Repeated exercise blocks in the same workout.
+- Chronological workout review.
+- Future support for supersets or exercise block notes.
 
-To support this requirement cleanly, the system design adds a technical join table:
+---
+
+## 10. Repeated Exercise Block Design
+
+The database must allow the same exercise to appear more than once in a workout.
+
+Example:
 
 ```text
-workout_exercises
+Workout A
+1. Bicep Curl
+2. Tricep Pushdown
+3. Bicep Curl
 ```
 
-This table allows the app to show an exercise block inside the active workout even when it still has zero sets.
+This is handled by `workout_exercises.exercise_order`, not by a unique `(workout_id, exercise_id)` constraint.
 
-This is not a new user-facing feature. It is a technical table needed to implement the existing “add exercise to workout session” behavior safely.
+### UI behavior for v1
 
----
-
-## 10. SQLite Schema Design
-
-SQLite should use `TEXT` for IDs and ISO date/time values, `REAL` for weights, and `INTEGER` for reps and boolean-like values.
-
-### 10.1 `exercises`
-
-```sql
-CREATE TABLE exercises (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  muscle_group TEXT NOT NULL,
-  equipment TEXT,
-  is_custom INTEGER NOT NULL DEFAULT 0,
-  is_archived INTEGER NOT NULL DEFAULT 0,
-  archived_at TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-```
-
-#### Notes
-
-- `is_custom = 0` means default exercise.
-- `is_custom = 1` means user-created exercise.
-- `is_archived = 1` hides the exercise from normal selection.
-- Used exercises should be archived instead of permanently deleted.
-
----
-
-### 10.2 `workouts`
-
-```sql
-CREATE TABLE workouts (
-  id TEXT PRIMARY KEY,
-  workout_date TEXT NOT NULL,
-  title TEXT,
-  notes TEXT,
-  status TEXT NOT NULL CHECK (status IN ('in_progress', 'completed')),
-  started_at TEXT NOT NULL,
-  completed_at TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  CHECK (
-    (status = 'completed' AND completed_at IS NOT NULL)
-    OR
-    (status = 'in_progress' AND completed_at IS NULL)
-  )
-);
-```
-
-#### Notes
-
-- `workout_date` stores the user-selected date.
-- `started_at` stores when the workout session was created.
-- `completed_at` is filled only after the workout is completed.
-- Only one active `in_progress` workout should normally exist in version 1.
-
-SQLite does not support partial uniqueness in all simple migration styles consistently across tooling, so the “only one active workout” rule can be enforced in the service layer for version 1.
-
----
-
-### 10.3 `workout_exercises`
-
-```sql
-CREATE TABLE workout_exercises (
-  id TEXT PRIMARY KEY,
-  workout_id TEXT NOT NULL,
-  exercise_id TEXT NOT NULL,
-  exercise_order INTEGER NOT NULL,
-  notes TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE,
-  FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE RESTRICT,
-  UNIQUE (workout_id, exercise_id)
-);
-```
-
-#### Notes
-
-- Supports an exercise block inside a workout before the first set is entered.
-- Keeps exercise ordering stable inside a workout.
-- For version 1, the same exercise should appear only once in the same workout. If the user selects it again, the app should focus the existing exercise block.
-
----
-
-### 10.4 `workout_sets`
-
-```sql
-CREATE TABLE workout_sets (
-  id TEXT PRIMARY KEY,
-  workout_id TEXT NOT NULL,
-  exercise_id TEXT NOT NULL,
-  set_number INTEGER NOT NULL,
-  weight REAL NOT NULL,
-  reps INTEGER NOT NULL,
-  notes TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE,
-  FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE RESTRICT,
-  CHECK (set_number > 0),
-  CHECK (weight >= 0),
-  CHECK (reps > 0),
-  UNIQUE (workout_id, exercise_id, set_number)
-);
-```
-
-#### Notes
-
-- Every set is saved immediately.
-- `weight` uses kilograms only.
-- `weight = 0` is allowed for bodyweight-only or unloaded movements.
-- `reps` must be a whole number greater than zero.
-- `set_number` is unique per workout and exercise.
-
----
-
-### 10.5 `body_records`
-
-```sql
-CREATE TABLE body_records (
-  id TEXT PRIMARY KEY,
-  record_date TEXT NOT NULL,
-  body_weight REAL NOT NULL,
-  notes TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  CHECK (body_weight > 0),
-  UNIQUE (record_date)
-);
-```
-
-#### Notes
-
-- Version 1 stores one bodyweight record per date.
-- If the user records bodyweight again for the same date, the app should ask whether to update the existing record instead of silently creating duplicates.
-
----
-
-### 10.6 `app_meta`
-
-```sql
-CREATE TABLE app_meta (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-```
-
-#### Notes
-
-Used to store internal metadata such as:
-
-- Current database schema version
-- Last successful migration timestamp
-- App data version
-
----
-
-## 11. Index Strategy
-
-Indexes should support the most common queries.
-
-```sql
-CREATE INDEX idx_workouts_date ON workouts(workout_date DESC);
-CREATE INDEX idx_workouts_status ON workouts(status);
-
-CREATE INDEX idx_workout_exercises_workout ON workout_exercises(workout_id, exercise_order);
-CREATE INDEX idx_workout_exercises_exercise ON workout_exercises(exercise_id);
-
-CREATE INDEX idx_workout_sets_workout ON workout_sets(workout_id);
-CREATE INDEX idx_workout_sets_exercise ON workout_sets(exercise_id);
-CREATE INDEX idx_workout_sets_exercise_created ON workout_sets(exercise_id, created_at DESC);
-
-CREATE INDEX idx_body_records_date ON body_records(record_date DESC);
-
-CREATE INDEX idx_exercises_group_archived ON exercises(muscle_group, is_archived);
-```
-
----
-
-## 12. ID Strategy
-
-All main records should use stable local string IDs.
-
-| Entity | Prefix | Example |
-|---|---|---|
-| Exercise | `ex_` | `ex_chest_press_machine` or `ex_a1b2c3` |
-| Workout | `wo_` | `wo_a1b2c3` |
-| Workout Exercise | `wex_` | `wex_a1b2c3` |
-| Workout Set | `set_` | `set_a1b2c3` |
-| Body Record | `br_` | `br_a1b2c3` |
-
-### Default Exercise IDs
-
-Default exercises should use stable readable IDs, for example:
+When the user selects an exercise that already exists in the active workout:
 
 ```text
-ex_chest_press_machine
-ex_lat_pulldown
-ex_seated_row
-ex_leg_press
-ex_shoulder_press_machine
-ex_lateral_raise
-ex_bicep_curl
-ex_tricep_pushdown
-ex_leg_extension
-ex_leg_curl
+Default behavior:
+- Focus the latest existing exercise block.
+
+Optional user action:
+- Show "Add again" to append a new exercise block at the bottom.
 ```
 
-Custom exercises should use generated IDs.
+This keeps the beginner flow fast while still allowing the database to represent repeated exercise blocks correctly.
 
 ---
 
-## 13. SQLite Migration Strategy
+## 11. Exercise Block Reordering Strategy
 
-The app should never reset the database automatically during development or update.
+### 11.1 Problem
 
-### Migration Flow
+The database enforces:
+
+```sql
+UNIQUE(workout_id, exercise_order)
+```
+
+That rule is correct, but naive swaps can fail because SQLite checks unique constraints immediately. For example, changing Block A from order `1` to order `2` can collide with Block B, which is still using order `2`.
+
+### 11.2 Required solution
+
+Keep `UNIQUE(workout_id, exercise_order)`, but implement `moveExerciseBlock()` and future drag-and-drop reorder operations using a safe transaction.
+
+Because the schema also requires `CHECK(exercise_order > 0)`, the app must not use temporary negative values. Use temporary positive parking values instead.
+
+Required flow:
 
 ```text
-App starts
+BEGIN TRANSACTION
+  Read all exercise blocks for the workout.
+  Build the final ordered list in memory.
+  Move affected rows to temporary positive parking orders.
+  Write final positive exercise_order values starting from 1.
+COMMIT
+```
+
+Example swap:
+
+```text
+Initial:
+A = 1
+B = 2
+
+Parking:
+A = 1000001
+B = 1000002
+
+Final:
+A = 2
+B = 1
+```
+
+Rules:
+
+- Reorder must run inside one SQLite transaction.
+- Reorder must not directly update a row into an order value currently used by another row.
+- Temporary parking values must be positive.
+- After commit, visible `exercise_order` values should be compact and sequential: `1, 2, 3, ...`.
+- If reorder fails, rollback must preserve the previous order.
+
+---
+
+## 12. Data Integrity Strategy
+
+The system should use both application-level validation and database-level constraints.
+
+### 12.1 App-level validation
+
+Used for friendly error messages:
+
+- Required fields.
+- Positive reps.
+- Weight must be zero or greater.
+- Bodyweight must be greater than zero.
+- Workout status must be valid.
+- Import file must have the correct structure.
+
+### 12.2 Database-level validation
+
+Used as the final safety guard:
+
+- Primary keys.
+- Foreign keys.
+- `CHECK` constraints.
+- Unique indexes.
+- Partial unique index for single active workout.
+- Transactional import.
+
+### 12.3 Single active workout rule
+
+Only one workout can have status `in_progress` at a time.
+
+This rule must be enforced in SQLite:
+
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS ux_workouts_single_in_progress
+ON workouts(status)
+WHERE status = 'in_progress';
+```
+
+The service layer should still check for an active workout before creating one, but the database is the final source of truth.
+
+---
+
+## 13. Workout Write Concurrency Strategy
+
+Workout logging is the most sensitive write path because it happens during real gym sessions and must be fast.
+
+### 13.1 Problem
+
+The following actions can happen quickly:
+
+- Double-tapping Start Workout.
+- Double-tapping Add Set.
+- Adding a set while the previous insert is still running.
+- Closing or backgrounding the app immediately after logging a set.
+
+A weak implementation can create:
+
+- Multiple active workouts.
+- Duplicate set numbers.
+- Constraint errors shown to the user.
+- Lost pending writes.
+
+### 13.2 Required design
+
+The app must use a `WorkoutWriteQueue` with these rules:
+
+```text
+The queue serializes concurrent workout write promises.
+The queue must not batch writes for later.
+The queue must not keep unsaved workout data waiting in memory.
+Each queued operation must immediately execute against SQLite when it reaches the front of the queue.
+Each operation should resolve before the UI treats the record as saved.
+```
+
+This queue is only an in-process concurrency guard. It is not a persistence layer.
+
+### 13.3 Mobile lifecycle risk
+
+React Native JavaScript can be suspended when the app goes to the background. Android can later kill the process for memory. Therefore, any design that stores pending workout writes in a delayed JS queue is unsafe.
+
+Mitigation:
+
+```text
+Do not use delayed write batching.
+Do not show a set as saved until SQLite insert succeeds.
+Disable or debounce the submit button while the write is in progress.
+Keep each write small and immediate.
+Use SQLite transactions for multi-step writes.
+```
+
+### 13.4 Set insertion transaction
+
+Set creation must calculate the next `set_number` and insert the set inside the same explicit transaction.
+
+Required operation:
+
+```text
+BEGIN TRANSACTION
+  SELECT COALESCE(MAX(set_number), 0) + 1
+  FROM workout_sets
+  WHERE workout_exercise_id = ?;
+
+  INSERT INTO workout_sets (..., set_number, ...)
+  VALUES (...);
+COMMIT
+```
+
+The `WorkoutWriteQueue` prevents concurrent JS writes from the app process, and the SQLite transaction protects the read/write operation as one unit.
+
+### 13.5 Database final guard
+
+The database must also enforce:
+
+```sql
+UNIQUE(workout_exercise_id, set_number)
+```
+
+If a constraint error still happens, the repository should return a controlled error and the UI should reload the exercise block instead of pretending the data was saved.
+
+---
+
+## 14. Start Workout Flow
+
+### 14.1 Normal flow
+
+```text
+User taps Start Workout
   ↓
-Open SQLite database
+Service asks repository for existing in_progress workout
+  ↓
+If found: return existing workout
+  ↓
+If not found: attempt to insert new in_progress workout
+  ↓
+Navigate to Start Workout screen
+```
+
+### 14.2 Double-tap-safe flow
+
+If two create requests happen at nearly the same time, the partial unique index may reject the second insert.
+
+Repository behavior must be:
+
+```text
+Try insert new in_progress workout
+  ↓
+If insert succeeds:
+  return new workout
+  ↓
+If SQLITE_CONSTRAINT_UNIQUE from ux_workouts_single_in_progress:
+  query current in_progress workout
+  return existing workout
+  ↓
+If another error:
+  return controlled failure
+```
+
+The UI should not show a crash screen for this expected race condition.
+
+---
+
+## 15. Add Exercise to Workout Flow
+
+```text
+User taps Add Exercise
+  ↓
+Exercise Selection Screen opens
+  ↓
+User selects an exercise
+  ↓
+Service checks whether exercise already exists in active workout
+  ↓
+If not found:
+  append new workout_exercises row with next exercise_order
+  ↓
+If found:
+  focus latest existing block by default
+  optionally offer "Add again"
+  ↓
+Return to Start Workout Screen
+```
+
+### Add Again behavior
+
+If the user chooses **Add again**, create a new `workout_exercises` row with:
+
+```text
+same workout_id
+same exercise_id
+new exercise_order
+new workout_exercise_id
+```
+
+The sets recorded under each block remain separate.
+
+---
+
+## 16. Add Set Flow
+
+```text
+User enters weight and reps
+  ↓
+UI validates input
+  ↓
+Submit button is disabled while save is in progress
+  ↓
+WorkoutWriteQueue receives operation
+  ↓
+Repository opens SQLite transaction
+  ↓
+Repository calculates next set_number for workout_exercise_id
+  ↓
+Repository inserts set
+  ↓
+Transaction commits
+  ↓
+UI reloads the exercise block
+  ↓
+Input may auto-fill previous weight for faster logging
+```
+
+The user should only see the set as saved after the transaction succeeds.
+
+---
+
+## 17. Delete Set and Resequence Flow
+
+### 17.1 Problem
+
+If the user records Sets `1, 2, 3` and deletes Set 2, a naive design leaves `1, 3`. The next insert using `MAX(set_number) + 1` would create Set 4, resulting in `1, 3, 4`.
+
+This is not data corruption, but it looks broken to the user and weakens workout history readability.
+
+### 17.2 Required behavior
+
+For v1, set numbers should remain compact inside each exercise block.
+
+Required flow:
+
+```text
+User deletes set
+  ↓
+Repository opens SQLite transaction
+  ↓
+Repository reads workout_exercise_id and set_number of deleted set
+  ↓
+Repository deletes the selected set
+  ↓
+Repository resequences remaining sets in that workout_exercise_id
+  ↓
+Transaction commits
+  ↓
+UI reloads the exercise block
+```
+
+### 17.3 Safe resequencing rule
+
+Because `UNIQUE(workout_exercise_id, set_number)` is immediate and the schema requires `CHECK(set_number > 0)`, resequencing must use temporary positive parking values.
+
+Example:
+
+```text
+After deleting Set 2:
+1, 3, 4
+
+Parking:
+1, 1000003, 1000004
+
+Final:
+1, 2, 3
+```
+
+After commit, set numbers for one exercise block should be sequential: `1, 2, 3, ...`.
+
+### 17.4 Update set behavior
+
+Editing an existing set should not normally change `set_number`. If a future reorder-sets feature is added, it must use the same parking-value transaction pattern as exercise block reordering.
+
+---
+
+## 18. Complete Workout Flow
+
+```text
+User taps Finish Workout
+  ↓
+App confirms if necessary
+  ↓
+Repository updates workout status to completed
+  ↓
+completed_at is filled
+  ↓
+Home and history screens show completed workout
+```
+
+Validation:
+
+```text
+status must be completed
+completed_at must be filled when completed
+completed_at must be null when in_progress
+```
+
+---
+
+## 19. Backup Export Design
+
+### 19.1 Export goal
+
+Export should create a complete portable JSON backup that can restore the app data later.
+
+### 19.2 Backup envelope
+
+```ts
+type BackupEnvelope = {
+  app_name: "Gym Progress Tracker";
+  backup_version: number;
+  app_schema_version: number;
+  exported_at: string;
+  exported_app_version?: string;
+  data: BackupData;
+};
+```
+
+### 19.3 Current v1.2 backup version
+
+For this design:
+
+```text
+current_backup_version = 1
+current_app_schema_version = 1
+```
+
+### 19.4 Exported data sections
+
+```ts
+type BackupData = {
+  exercises: ExerciseBackupRow[];
+  workouts: WorkoutBackupRow[];
+  workout_exercises: WorkoutExerciseBackupRow[];
+  workout_sets: WorkoutSetBackupRow[];
+  body_records: BodyRecordBackupRow[];
+};
+```
+
+### 19.5 Export rules
+
+- Export all non-internal user data.
+- Include archived exercises because history depends on them.
+- Include stable IDs.
+- Include timestamps.
+- Include backup version.
+- Include app schema version.
+- Do not include analytics, device identifiers, or external tracking data.
+
+---
+
+## 20. Backup Import Lifecycle
+
+### 20.1 Import goal
+
+The app must restore valid backup files safely, including older backup versions that have a supported transformer path.
+
+### 20.2 Import flow
+
+```text
+User selects JSON file
+  ↓
+Parse JSON
+  ↓
+Validate backup envelope shape
+  ↓
+Read backup_version
+  ↓
+If backup_version > current_backup_version:
+  reject because backup was created by a newer app
+  ↓
+If backup_version < current_backup_version:
+  transform step-by-step until current version
+  ↓
+If backup_version === current_backup_version:
+  continue
+  ↓
+Validate transformed backup data against current schema
+  ↓
+Validate referential integrity
+  ↓
+Validate only one in_progress workout
+  ↓
+Show confirmation warning
+  ↓
+Run replace import inside one SQLite transaction
+  ↓
+Commit if all inserts pass
+  ↓
+Rollback if any step fails
+```
+
+### 20.3 Unsupported backup definition
+
+A backup should be rejected only when:
+
+- It is not valid JSON.
+- It does not contain the required envelope fields.
+- It was created by a newer backup version.
+- It uses an old version with no available transformer.
+- It fails validation after transformation.
+- It violates required integrity rules.
+
+Older backups should not be rejected simply because they are older.
+
+### 20.4 Backup transformer chain
+
+When the app reaches future versions, transformers should be chained:
+
+```text
+v1 backup → transform v1 to v2
+v2 backup → transform v2 to v3
+v3 backup → transform v3 to v4
+...
+current backup version
+```
+
+Transformers should be pure functions:
+
+```ts
+type BackupTransformer = (input: unknown) => unknown;
+```
+
+They should not write to SQLite directly. They only convert JSON data into the next supported backup shape.
+
+### 20.5 Historical backup fixtures
+
+For every previous `backup_version`, the repository must maintain JSON test fixtures.
+
+Required fixtures:
+
+```text
+src/features/backup/fixtures/
+  backup-v1-valid.json
+  backup-v1-invalid-multiple-active-workouts.json
+```
+
+When v2 exists, add:
+
+```text
+  backup-v2-valid.json
+  backup-v2-invalid.json
+```
+
+Testing rule:
+
+```text
+Every supported historical backup_version must have test fixtures.
+Every backup transformer must have unit tests.
+Every app release must verify old valid backups still import successfully.
+```
+
+This is mandatory because backup is a core data-safety feature, not a convenience feature.
+
+---
+
+## 21. Replace-Style Import Transaction
+
+Version 1 uses replace-style import, not merge import.
+
+The replace import must be atomic:
+
+```text
+BEGIN TRANSACTION
+  DELETE FROM workout_sets;
+  DELETE FROM workout_exercises;
+  DELETE FROM workouts;
+  DELETE FROM body_records;
+  DELETE FROM exercises;
+
+  INSERT exercises;
+  INSERT workouts;
+  INSERT workout_exercises;
+  INSERT workout_sets;
+  INSERT body_records;
+COMMIT
+```
+
+If any insert fails:
+
+```text
+ROLLBACK
+Previous local data remains unchanged
+Show import failure message
+```
+
+### Important precondition
+
+The app must validate the transformed backup before the transaction starts.
+
+The transaction is the final safety layer, but validation should catch predictable issues before deleting current data inside the transaction.
+
+---
+
+## 22. Database Migration Strategy
+
+The app must use versioned SQLite migrations.
+
+Startup flow:
+
+```text
+Open database
   ↓
 Enable foreign keys
   ↓
@@ -574,850 +980,299 @@ Run missing migrations in order
 Update schema version
   ↓
 Seed default exercises idempotently
-  ↓
-App becomes usable
 ```
 
-### Rules
+Rules:
 
-1. Every schema change must be versioned.
-2. Migrations must run in order.
-3. A failed migration must stop startup and show a safe error.
-4. Default exercises must be seeded idempotently using stable IDs.
-5. Seeding must not duplicate existing exercises.
-6. Seeding must not overwrite user-edited or archived state unless explicitly intended.
+- Never reset the database automatically during normal migration.
+- Never delete workout history during migration.
+- Migrations must be deterministic.
+- Migrations should be covered by tests.
+- Backup version and database schema version are related but not the same thing.
 
----
+### Backup version vs database schema version
 
-## 14. App Startup Flow
-
-```text
-Launch app
-  ↓
-Initialize database
-  ↓
-Run migrations
-  ↓
-Seed default exercises
-  ↓
-Check for in-progress workout
-  ↓
-Load home screen data
-  ↓
-Show Home screen
-```
-
-If an in-progress workout exists, the Home screen should show a clear **Continue Workout** action.
-
----
-
-## 15. Core Feature Flows
-
-## 15.1 Start Workout Flow
-
-```text
-User taps Start Workout
-  ↓
-App checks existing in-progress workout
-  ↓
-If active workout exists:
-  show Continue Workout option
-  ↓
-If no active workout:
-  create workout with status = in_progress
-  ↓
-Open Start Workout Screen
-```
-
-### Data Created
-
-```text
-workouts row
-```
-
----
-
-## 15.2 Add Exercise to Workout Flow
-
-```text
-User taps Add Exercise
-  ↓
-Exercise Selection Screen opens
-  ↓
-User selects exercise
-  ↓
-App creates workout_exercises row
-  ↓
-Start Workout Screen shows exercise block
-```
-
-### Data Created
-
-```text
-workout_exercises row
-```
-
-If the exercise already exists in the current workout, the app should not create a duplicate. It should navigate back and focus the existing exercise block.
-
----
-
-## 15.3 Add Set Flow
-
-```text
-User enters weight and reps
-  ↓
-App validates input
-  ↓
-App calculates next set_number
-  ↓
-App inserts workout_sets row immediately
-  ↓
-UI updates set list
-  ↓
-Next input can auto-fill previous weight
-```
-
-### Data Created
-
-```text
-workout_sets row
-```
-
-### Important Rule
-
-The app must save each set immediately after the user records it. It should not wait until the workout is completed.
-
----
-
-## 15.4 Complete Workout Flow
-
-```text
-User taps Finish Workout
-  ↓
-App confirms if needed
-  ↓
-App updates workout status to completed
-  ↓
-App sets completed_at
-  ↓
-Workout becomes visible in history
-```
-
-### Data Updated
-
-```text
-workouts.status = completed
-workouts.completed_at = now
-```
-
----
-
-## 15.5 Continue Unfinished Workout Flow
-
-```text
-App starts
-  ↓
-App finds workout where status = in_progress
-  ↓
-Home shows Continue Workout
-  ↓
-User taps Continue Workout
-  ↓
-Start Workout Screen loads existing exercises and sets
-```
-
-This implements the requirement that the user can close and reopen the app during training without losing progress.
-
----
-
-## 15.6 Exercise Detail Flow
-
-```text
-User opens Exercise Detail
-  ↓
-App loads exercise info
-  ↓
-App loads latest set record
-  ↓
-App loads best weight
-  ↓
-App loads history grouped by workout date
-  ↓
-Screen renders summary and history list
-```
-
-### Queries Needed
-
-- Last record for exercise
-- Best weight for exercise
-- History rows grouped by workout date
-
-### Version 1 Progress Summary
-
-Version 1 should show:
-
-- Last workout record
-- Best weight
-- Exercise history by date
-
-Charts and advanced volume analytics are not included in version 1.
-
----
-
-## 15.7 Bodyweight Record Flow
-
-```text
-User enters bodyweight and date
-  ↓
-App validates input
-  ↓
-If date already exists:
-  ask whether to update existing record
-  ↓
-Save body_records row
-  ↓
-Refresh bodyweight history
-```
-
----
-
-## 16. Exercise Management Rules
-
-### Add Custom Exercise
-
-```text
-Validate name and muscle group
-  ↓
-Create exercises row with is_custom = 1
-```
-
-### Edit Custom Exercise
-
-Only custom exercises should be editable in version 1.
-
-```text
-Check exercise.is_custom = 1
-  ↓
-Validate input
-  ↓
-Update exercise
-```
-
-### Delete or Archive Exercise
-
-```text
-User requests delete
-  ↓
-Check if exercise is used in workout_sets
-  ↓
-If not used:
-  allow permanent delete
-  ↓
-If used:
-  block delete and offer archive/hide
-```
-
-### Archive Behavior
-
-```text
-is_archived = 1
-archived_at = now
-```
-
-Archived exercises should remain visible in old workout history but hidden from normal exercise selection by default.
-
----
-
-## 17. Backup Export Design
-
-### Export Trigger
-
-The user taps **Export Data** in the Settings / Backup screen.
-
-### Export Flow
-
-```text
-User taps Export Data
-  ↓
-App reads all data from SQLite
-  ↓
-App builds backup JSON object
-  ↓
-App writes JSON file locally
-  ↓
-App opens share/export sheet
-```
-
-### Backup File Structure
-
-```json
-{
-  "app_name": "Gym Progress Tracker",
-  "backup_version": 1,
-  "exported_at": "2026-06-29T10:00:00Z",
-  "data": {
-    "exercises": [],
-    "workouts": [],
-    "workout_exercises": [],
-    "workout_sets": [],
-    "body_records": []
-  }
-}
-```
-
-### Design Note
-
-The Requirement Document example includes `exercises`, `workouts`, `workout_sets`, and `body_records`. Because this system design adds `workout_exercises`, the export format should include it too.
-
-This prevents losing the order of exercises inside a workout and supports exercise blocks that have no sets yet.
-
----
-
-## 18. Backup Import Design
-
-Version 1 uses replace-style import only.
-
-### Import Flow
-
-```text
-User taps Import Data
-  ↓
-App recommends exporting current data first
-  ↓
-User selects JSON file
-  ↓
-App parses JSON
-  ↓
-App validates backup structure and data
-  ↓
-App shows destructive confirmation warning
-  ↓
-If user confirms:
-    begin database transaction
-      delete current local data
-      insert backup data
-      seed missing default exercises idempotently
-    commit transaction
-  ↓
-Show success message
-```
-
-### Failure Flow
-
-```text
-Import starts
-  ↓
-Transaction begins
-  ↓
-Something fails
-  ↓
-Rollback transaction
-  ↓
-Previous local data remains unchanged
-  ↓
-Show error message
-```
-
-### Import Delete Order
-
-When replacing current data, delete child records first:
-
-```text
-workout_sets
-workout_exercises
-body_records
-workouts
-exercises
-```
-
-### Import Insert Order
-
-When inserting backup data, insert parent records first:
-
-```text
-exercises
-workouts
-workout_exercises
-workout_sets
-body_records
-```
-
----
-
-## 19. Backup Validation Rules
-
-The backup validator should check:
-
-### File-Level Validation
-
-- File is valid JSON.
-- `app_name` exists and equals `Gym Progress Tracker`.
-- `backup_version` exists.
-- `backup_version` is supported by the app.
-- `exported_at` exists and is a valid ISO date/time.
-- `data` object exists.
-
-### Data Section Validation
-
-Required arrays:
-
-- `data.exercises`
-- `data.workouts`
-- `data.workout_exercises`
-- `data.workout_sets`
-- `data.body_records`
-
-### Record Validation
-
-The validator should check:
-
-- Required fields exist.
-- IDs are strings.
-- IDs use the expected prefix where practical.
-- Dates are valid strings.
-- Weight values are valid numbers.
-- Reps are positive integers.
-- Workout status is either `in_progress` or `completed`.
-- Foreign key references are valid.
-- Duplicate IDs do not exist inside the backup.
-- Unsupported backup versions are rejected.
-
-### Import Safety Rule
-
-The app must not delete current local data until the backup file has passed validation and the user confirms import.
-
----
-
-## 20. Validation Strategy
-
-Validation should happen in two layers:
-
-1. **App/service validation** for user-friendly errors.
-2. **SQLite constraints** for final data protection.
-
-### Workout Validation
-
-| Field | Rule |
+| Version Type | Purpose |
 |---|---|
-| `workout_date` | Required |
-| `status` | `in_progress` or `completed` |
-| `completed_at` | Required only when status is completed |
+| Database schema version | Tracks the local SQLite table structure. |
+| Backup version | Tracks the exported JSON backup structure. |
+| App version | Tracks the installed application release. |
 
-### Exercise Validation
-
-| Field | Rule |
-|---|---|
-| `name` | Required |
-| `muscle_group` | Required |
-| `equipment` | Optional |
-
-### Set Validation
-
-| Field | Rule |
-|---|---|
-| `weight` | Required, number, `>= 0` |
-| `reps` | Required, whole number, `> 0` |
-| `set_number` | Required, whole number, `> 0` |
-| `notes` | Optional |
-
-### Body Record Validation
-
-| Field | Rule |
-|---|---|
-| `record_date` | Required |
-| `body_weight` | Required, number, `> 0` |
-| `notes` | Optional |
+A schema migration does not always require a backup version change, but if exported JSON structure changes, backup version must change.
 
 ---
 
-## 21. State Management Design
+## 23. Repository Error Handling
 
-Version 1 does not need heavy global state management.
+Repositories should return controlled results instead of throwing raw database errors into the UI.
 
-Recommended approach:
+Recommended result style:
 
-- Use local component state for form inputs.
-- Use feature hooks for screen data loading.
-- Use repository calls as the source of truth.
-- Refresh screen data after successful writes.
-- Avoid duplicating full database state in memory.
-
-### Example
-
-```text
-StartWorkoutScreen
-  ↓ uses
-useActiveWorkout()
-  ↓ calls
-workoutService
-  ↓ calls
-workoutRepository
-  ↓ reads/writes
-SQLite
+```ts
+type Result<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: AppError };
 ```
 
-This is simpler and safer for an offline-first MVP.
+### Important errors
 
----
-
-## 22. Error Handling Design
-
-### Error Categories
-
-| Category | Example | UI Response |
+| Error | Repository behavior | UI behavior |
 |---|---|---|
-| Validation error | Negative weight | Show field error |
-| Database error | Insert failed | Show safe error message |
-| Import validation error | Invalid backup file | Show import error and keep current data |
-| Import transaction error | Insert failed during import | Rollback and show error |
-| File error | Export failed | Show retry message |
-| Migration error | Schema upgrade failed | Show blocking app error |
+| Unique active workout constraint | Query and return existing active workout. | Continue to workout screen. |
+| Duplicate set number constraint | Reload exercise block and show retry message if needed. | Do not show crash screen. |
+| Duplicate exercise order during reorder | Roll back reorder and reload workout blocks. | Keep previous order visible. |
+| Duplicate body record date | Return existing record or update-intent result. | Ask user whether to update the existing record. |
+| Foreign key failure | Return data integrity error. | Show controlled message. |
+| Invalid backup | Return validation error. | Show readable import failure reason. |
+| Transaction failure | Roll back and return failure. | Tell user previous data remains unchanged. |
 
-### User-Friendly Error Style
+---
 
-Errors should be clear but not overly technical.
+## 24. Validation Strategy
 
-Example:
+### Workout validation
+
+- `workout_date` is required.
+- `status` must be `in_progress` or `completed`.
+- `completed_at` must be filled only when status is `completed`.
+- Only one workout can be `in_progress`.
+
+### Exercise validation
+
+- Name is required.
+- Muscle group is required.
+- Equipment is optional.
+- Used exercises must be archived instead of permanently deleted.
+
+### Workout exercise validation
+
+- `workout_id` must exist.
+- `exercise_id` must exist.
+- `exercise_order` must be greater than zero.
+- `exercise_order` must be unique inside one workout.
+- Repeated `exercise_id` is allowed inside one workout.
+
+### Set validation
+
+- `workout_exercise_id` must exist.
+- Weight is required.
+- Weight must be zero or greater.
+- Reps are required.
+- Reps must be greater than zero.
+- Reps must be a whole number.
+- Set number must be greater than zero.
+- Set number must be unique inside one workout exercise block.
+
+### Body record validation
+
+- Record date is required.
+- Only one bodyweight record is allowed per `record_date`.
+- If the user enters bodyweight again for the same date, the app should offer to update the existing record instead of creating a duplicate.
+- Bodyweight is required.
+- Bodyweight must be greater than zero.
+
+### Backup validation
+
+- File must be valid JSON.
+- Envelope must contain `app_name`.
+- Envelope must contain `backup_version`.
+- Envelope must contain `app_schema_version`.
+- Envelope must contain `exported_at`.
+- Envelope must contain required data sections.
+- Transformed data must match current backup shape.
+- Referenced IDs must exist.
+- Backup must not contain more than one `in_progress` workout.
+
+---
+
+## 25. Privacy and Permissions
+
+Version 1 should avoid unnecessary permissions.
+
+The app should not include:
+
+- Analytics.
+- Ads.
+- External tracking.
+- Automatic cloud upload.
+- Account requirement.
+
+Permissions should be limited to what is required for backup import/export.
+
+---
+
+## 26. Testing Strategy
+
+### 26.1 Unit tests
+
+Required tests:
+
+- Workout validation.
+- Exercise validation.
+- Set validation.
+- Body record validation.
+- One bodyweight record per date validation.
+- ID generation format.
+- Backup envelope validation.
+- Backup data validation.
+- Backup transformers.
+- Historical backup fixture imports.
+
+### 26.2 Repository tests
+
+Required tests:
+
+- Create workout.
+- Return existing active workout on double create.
+- Enforce single active workout partial unique index.
+- Add exercise block.
+- Move exercise block using parking-value transaction.
+- Reorder rollback preserves old order after failure.
+- Add same exercise again as a new block.
+- Focus latest existing exercise block by default.
+- Add set with transaction-safe set number.
+- Prevent duplicate set number.
+- Delete set resequences remaining set numbers.
+- Resequence rollback preserves old sets after failure.
+- Archive used exercise.
+- Delete unused custom exercise.
+- Transaction-safe import rollback.
+
+### 26.3 Concurrency tests
+
+Required tests:
+
+- Rapid double tap Start Workout creates only one active workout.
+- Rapid Add Set calls produce sequential set numbers.
+- Rapid delete/add set operations keep compact set numbers.
+- Constraint errors are handled without crashing.
+- UI does not mark set as saved before repository success.
+
+### 26.4 Backup lifecycle tests
+
+Required tests:
+
+- Current backup exports successfully.
+- Current backup imports successfully.
+- Historical v1 fixture imports successfully.
+- Invalid backup with multiple active workouts is rejected.
+- Newer backup version is rejected clearly.
+- Old backup with no transformer is rejected clearly.
+- Failed import leaves existing local data unchanged.
+
+### 26.5 Real gym usage tests
+
+Required tests:
+
+- Start workout quickly.
+- Add exercise quickly.
+- Add sets quickly.
+- Close and reopen app during an unfinished workout.
+- Continue unfinished workout.
+- Review last exercise record during workout.
+- Export backup.
+- Import backup on a fresh install.
+
+---
+
+## 27. Android APK Build Strategy
+
+Version 1 final runtime must be a standalone Android APK.
+
+Recommended flow:
 
 ```text
-Cannot import this backup file. The file format is invalid or unsupported.
+Early development:
+- Expo Go may be used temporarily.
+
+Serious development:
+- Expo development build.
+
+Final testing:
+- Standalone Android APK through EAS Build.
+
+Real usage:
+- Install APK on Android phone.
 ```
 
-For development logs, keep more technical details in console/debug logs.
+The APK should be tested during real gym sessions, not only on an emulator.
 
 ---
 
-## 23. Privacy and Permissions Design
+## 28. Implementation Order
 
-Version 1 should not collect or upload personal data.
+Recommended order after v1.1 design approval:
 
-### Privacy Rules
-
-- No analytics.
-- No ads.
-- No external tracking.
-- No account requirement.
-- No automatic cloud upload.
-- Workout and bodyweight data stays on device unless the user exports it.
-
-### Permission Rules
-
-The app should request only permissions needed for backup file import/export.
-
-### Backup Privacy Warning
-
-The backup file contains personal workout and bodyweight data. The app should remind the user to store exported files safely.
-
----
-
-## 24. Fast Input UX Design
-
-Because the app is used during workouts, speed matters more than visual complexity.
-
-### Set Input Rules
-
-- Weight and reps fields should be easy to tap.
-- Add Set button should be large enough for gym usage.
-- After adding a set, keep the user in the same exercise block.
-- Auto-fill the next set weight from the previous set when practical.
-- Clear or focus reps field after adding a set.
-- Save immediately after tapping Add Set.
-
-### Workout Screen Layout
-
-Recommended order:
-
-```text
-Workout title/date
-Add Exercise button
-Exercise blocks
-  Exercise name
-  Previous/best summary if available
-  Set list
-  Weight input
-  Reps input
-  Add Set button
-Finish Workout button
-```
+1. Initialize React Native Expo TypeScript project.
+2. Add navigation shell.
+3. Add SQLite adapter.
+4. Add migration runner.
+5. Implement database schema v1.1.
+6. Seed default exercises idempotently.
+7. Implement workout repositories.
+8. Implement `WorkoutWriteQueue`.
+9. Implement active workout flow.
+10. Implement add exercise block flow.
+11. Implement add set transaction flow.
+12. Implement delete set resequencing transaction.
+13. Implement safe exercise block reordering transaction.
+14. Implement workout history and detail.
+15. Implement exercise history and best weight.
+16. Implement bodyweight records with one-record-per-date behavior.
+17. Implement backup export.
+18. Implement backup import validation and transaction.
+19. Add backup fixtures and transformer tests.
+20. Test rapid input and app restart behavior.
+21. Build standalone Android APK.
+22. Test during real gym usage.
 
 ---
 
-## 25. Query Design
+## 29. v1.2 Design Decisions Summary
 
-### Latest Workout Summary
-
-```sql
-SELECT *
-FROM workouts
-WHERE status = 'completed'
-ORDER BY workout_date DESC, completed_at DESC
-LIMIT 1;
-```
-
-### Active Workout
-
-```sql
-SELECT *
-FROM workouts
-WHERE status = 'in_progress'
-ORDER BY started_at DESC
-LIMIT 1;
-```
-
-### Workout History
-
-```sql
-SELECT
-  w.*,
-  COUNT(DISTINCT ws.exercise_id) AS exercise_count,
-  COUNT(ws.id) AS set_count
-FROM workouts w
-LEFT JOIN workout_sets ws ON ws.workout_id = w.id
-WHERE w.status = 'completed'
-GROUP BY w.id
-ORDER BY w.workout_date DESC, w.completed_at DESC;
-```
-
-### Exercise Last Record
-
-```sql
-SELECT ws.*, w.workout_date
-FROM workout_sets ws
-JOIN workouts w ON w.id = ws.workout_id
-WHERE ws.exercise_id = ?
-ORDER BY w.workout_date DESC, ws.created_at DESC
-LIMIT 1;
-```
-
-### Exercise Best Weight
-
-```sql
-SELECT MAX(weight) AS best_weight
-FROM workout_sets
-WHERE exercise_id = ?;
-```
-
-### Bodyweight History
-
-```sql
-SELECT *
-FROM body_records
-ORDER BY record_date DESC;
-```
+| Decision | Status | Reason |
+|---|---|---|
+| Use SQLite local database | Accepted | Required for offline-first structured storage. |
+| Use stable string IDs | Accepted | Safer export/import and future sync. |
+| Add `workout_exercises` table | Accepted | Supports exercise blocks before sets exist. |
+| Allow repeated exercise blocks | Accepted | Preserves chronological workout reality. |
+| `workout_sets` references `workout_exercise_id` | Accepted | Stronger relational model. |
+| Enforce one active workout using partial unique index | Accepted | Prevents ghost active workouts. |
+| Use `WorkoutWriteQueue` | Accepted with constraint | Only serialize immediate writes; no delayed batching. |
+| Calculate set number inside transaction | Accepted | Prevents race condition during rapid logging. |
+| Safe exercise block reorder transaction | Required | Prevents immediate unique constraint collisions during swaps. |
+| Delete set resequencing transaction | Required | Keeps visible set numbers compact after deletion. |
+| One bodyweight record per date | Required | Prevents duplicate daily bodyweight records. |
+| Use backup transformers | Accepted | Allows old backups to survive app updates. |
+| Maintain historical backup fixtures | Required | Protects long-term backup compatibility. |
+| Replace import only | Accepted for v1 | Simpler and avoids merge conflicts. |
+| No backend in v1 | Accepted | Keeps MVP realistic. |
 
 ---
 
-## 26. Build and Release Design
+## 30. Remaining Known Tradeoffs
 
-### Development Runtime
+1. **Backup transformers create long-term maintenance work.**  
+   This is acceptable because data safety is a core feature. The mitigation is mandatory historical fixtures and transformer tests.
 
-Expo Go may be used only for temporary early testing.
+2. **Repeated exercise blocks add UI complexity.**  
+   This is controlled by focusing the latest existing block by default and only appending a duplicate block when the user chooses **Add again**.
 
-For serious testing, use:
+3. **Set numbering needs resequencing after deletion.**  
+   This is acceptable because the repository owns all set deletion and can keep the UI simple by making set numbers compact after every delete.
 
-```text
-Expo development build
-```
+4. **Exercise block reordering is more complex than direct updates.**  
+   This is acceptable because the complexity is hidden inside the repository and prevents unique constraint failures.
 
-### Final Version 1 Runtime
-
-Final user testing should use:
-
-```text
-Standalone Android APK
-```
-
-### Build Flow
-
-```text
-Develop app
-  ↓
-Test in development build
-  ↓
-Run TypeScript and app checks
-  ↓
-Build APK with EAS Build
-  ↓
-Install APK on Android phone
-  ↓
-Test during real gym session
-```
+5. **Replace import is destructive.**  
+   This is acceptable for v1 only because import requires validation, confirmation, transaction rollback safety, and a recommendation to export current data first.
 
 ---
 
-## 27. Testing Strategy
+## 31. Conclusion
 
-### Unit Tests
+System Design v1.2 keeps the MVP simple but fixes the additional runtime bugs found after the v1.1 review.
 
-Recommended unit test targets:
+The revised design is stronger because it treats SQLite as the final integrity layer, avoids delayed workout write batching, supports repeated exercise blocks, defines a backup migration lifecycle, avoids reorder constraint traps, restores one-record-per-day bodyweight integrity, and keeps set numbers compact after deletion.
 
-- ID generation
-- Workout validation
-- Exercise validation
-- Set validation
-- Body record validation
-- Backup validation
-- Backup version checking
-
-### Repository Tests
-
-Recommended repository test targets:
-
-- Create workout
-- Add exercise to workout
-- Add set
-- Edit set
-- Delete set
-- Complete workout
-- Query workout history
-- Query exercise history
-- Archive used exercise
-- Delete unused exercise
-
-### Migration Tests
-
-Recommended migration test targets:
-
-- Fresh database creates all tables
-- Running migrations twice does not break data
-- Default exercise seed is idempotent
-- Existing data survives migration
-
-### Import/Export Tests
-
-Recommended backup test targets:
-
-- Export file contains all required sections
-- Valid backup imports successfully
-- Invalid JSON is rejected
-- Unsupported backup version is rejected
-- Duplicate IDs are rejected
-- Broken foreign keys are rejected
-- Failed import rolls back and keeps previous data
-
-### Manual Real-Use Tests
-
-Test during a real workout:
-
-- Start workout quickly
-- Add exercises quickly
-- Add 3 sets for one exercise
-- Close the app during workout
-- Reopen and continue workout
-- Finish workout
-- View history
-- View exercise detail
-- Export backup
-- Import backup safely
-
----
-
-## 28. Risks and Tradeoffs
-
-### Risk 1: Backup import can destroy current data
-
-Replace-style import is simpler than merge import, but it is destructive.
-
-Mitigation:
-
-- Validate before import.
-- Recommend export before import.
-- Show confirmation warning.
-- Use transaction-safe replacement.
-
-### Risk 2: No account or cloud backup
-
-The user can lose data if the phone is lost and no manual backup exists.
-
-Mitigation:
-
-- Make export easy to find.
-- Remind user that backups must be stored safely.
-
-### Risk 3: SQLite migration mistakes can damage valuable history
-
-Workout history becomes important over time.
-
-Mitigation:
-
-- Use versioned migrations.
-- Do not reset database automatically.
-- Test migrations before real usage.
-
-### Risk 4: Too much UI friction during workouts
-
-If logging is slow, the app will not be used consistently.
-
-Mitigation:
-
-- Keep set input minimal.
-- Auto-fill previous set weight.
-- Use large buttons.
-- Keep active workout flow simple.
-
-### Risk 5: Added `workout_exercises` table increases schema complexity
-
-The requirement data model did not include this table.
-
-Mitigation:
-
-- Keep it small and technical.
-- Use it only for ordering and representing selected exercises before sets exist.
-- Include it in backup export/import so data remains complete.
-
----
-
-## 29. Implementation Order
-
-Recommended implementation order:
-
-1. Create Expo React Native TypeScript project.
-2. Configure basic Android app metadata.
-3. Create navigation shell.
-4. Add SQLite database initialization.
-5. Add migration runner.
-6. Create initial schema migration.
-7. Seed default exercises idempotently.
-8. Build exercise list and exercise selection.
-9. Build start workout flow.
-10. Build add exercise to workout flow.
-11. Build set input and immediate save.
-12. Build continue unfinished workout behavior.
-13. Build workout history.
-14. Build workout detail.
-15. Build exercise detail and simple progress summary.
-16. Build bodyweight tracking.
-17. Build exercise management, archive, and delete rules.
-18. Build JSON export.
-19. Build JSON import validation.
-20. Build transaction-safe replace import.
-21. Test with real workout data.
-22. Build standalone Android APK.
-
----
-
-## 30. Version 1 Design Summary
-
-Gym Progress Tracker v1 should be built as a local-first Android mobile app using React Native, Expo, TypeScript, and SQLite.
-
-The core architecture is intentionally simple:
-
-```text
-Screens → Hooks → Services → Repositories → SQLite
-```
-
-The most important design decisions are:
-
-- Store all workout data locally in SQLite.
-- Save every set immediately.
-- Use stable local string IDs.
-- Use versioned migrations.
-- Seed default exercises idempotently.
-- Add `workout_exercises` as a technical join table.
-- Archive used exercises instead of deleting them.
-- Export/import JSON backups manually.
-- Validate backup files before import.
-- Run replace-style import inside a database transaction.
-- Build the final version as a standalone Android APK, not an Expo Go app.
-
-This design keeps version 1 realistic, safe, and focused on actual gym usage.
+The next step after accepting this document is to review **Database Design v1.2**, because the schema and repository contracts must reflect these system-level decisions.
