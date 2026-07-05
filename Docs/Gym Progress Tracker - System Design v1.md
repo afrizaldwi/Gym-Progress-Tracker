@@ -1,8 +1,7 @@
-# Gym Progress Tracker — System Design v1.2
+# Gym Progress Tracker — System Design v1
 
-**Document Status:** Revised Draft v1.2  
+**Document Status:** Draft v1  
 **Source Requirement:** Gym Progress Tracker — Requirement Document v1  
-**Replaces:** Gym Progress Tracker — System Design v1.1  
 **Target Version:** Version 1 MVP  
 **Target Platform:** Android standalone APK  
 **System Type:** Offline-first mobile application  
@@ -26,13 +25,13 @@ Version 1 remains intentionally simple:
 - No cloud sync.
 - No analytics or external tracking.
 
-This v1.2 revision keeps the v1.1 safety model and fixes three additional runtime flaws found during review:
+This document keeps the approved safety model and fixes three additional runtime flaws found during review:
 
 1. Exercise block reordering now avoids immediate `UNIQUE(workout_id, exercise_order)` collisions.
 2. Bodyweight records are explicitly one record per date.
 3. Deleting a set now resequences remaining set numbers safely.
 
-The v1.1 safety decisions remain active: backup transformers, single-active-workout partial unique index, immediate write serialization, transactional set insertion, repeated exercise blocks, and historical backup fixtures.
+The approved safety decisions remain active: backup transformers, single-active-workout partial unique index, immediate write serialization, transactional set insertion, repeated exercise blocks, and historical backup fixtures.
 
 ---
 
@@ -60,7 +59,7 @@ The system design is optimized for these priorities:
 
 ---
 
-## 3. Scope of System Design v1.2
+## 3. Scope of System Design v1
 
 ### Included
 
@@ -359,7 +358,7 @@ The requirement says the user can add an exercise to a workout and then record s
 
 That is weak because the user may add an exercise first, then record sets later.
 
-Therefore, v1.1 uses:
+Therefore, this design uses:
 
 ```text
 workouts
@@ -786,7 +785,7 @@ type BackupEnvelope = {
 };
 ```
 
-### 19.3 Current v1.2 backup version
+### 19.3 Current backup version
 
 For this design:
 
@@ -1201,13 +1200,13 @@ The APK should be tested during real gym sessions, not only on an emulator.
 
 ## 28. Implementation Order
 
-Recommended order after v1.1 design approval:
+Recommended order after design approval:
 
 1. Initialize React Native Expo TypeScript project.
 2. Add navigation shell.
 3. Add SQLite adapter.
 4. Add migration runner.
-5. Implement database schema v1.1.
+5. Implement the approved database schema.
 6. Seed default exercises idempotently.
 7. Implement workout repositories.
 8. Implement `WorkoutWriteQueue`.
@@ -1228,7 +1227,7 @@ Recommended order after v1.1 design approval:
 
 ---
 
-## 29. v1.2 Design Decisions Summary
+## 29. Design Decisions Summary
 
 | Decision | Status | Reason |
 |---|---|---|
@@ -1271,8 +1270,8 @@ Recommended order after v1.1 design approval:
 
 ## 31. Conclusion
 
-System Design v1.2 keeps the MVP simple but fixes the additional runtime bugs found after the v1.1 review.
+System Design v1 keeps the MVP simple but fixes the additional runtime bugs found after the design review.
 
 The revised design is stronger because it treats SQLite as the final integrity layer, avoids delayed workout write batching, supports repeated exercise blocks, defines a backup migration lifecycle, avoids reorder constraint traps, restores one-record-per-day bodyweight integrity, and keeps set numbers compact after deletion.
 
-The next step after accepting this document is to review **Database Design v1.2**, because the schema and repository contracts must reflect these system-level decisions.
+The next step after accepting this document is to review **the Database Design**, because the schema and repository contracts must reflect these system-level decisions.

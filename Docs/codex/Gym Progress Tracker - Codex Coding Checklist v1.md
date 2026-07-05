@@ -1,6 +1,6 @@
-# Gym Progress Tracker — Codex Coding Checklist v1.1
+# Gym Progress Tracker — Codex Coding Checklist v1
 
-**Document Status:** Draft v1.1  
+**Document Status:** Draft v1  
 **Source Documents:** Requirement Document, PRD and Codex Project Brief, System Design, Database Design, UI Flow and Screen Design, Component Design, Implementation Plan, UI Style Guide and Theme Tokens  
 **Target Version:** Version 1 MVP  
 **Target Platform:** Android standalone APK  
@@ -28,9 +28,9 @@ Gym Progress Tracker — UI Flow and Screen Design
 Gym Progress Tracker — Component Design
 ```
 
-## Revision Focus
+## Implementation Focus
 
-This v1.1 checklist adds the finalized UI styling decision before implementation starts:
+This checklist adds the finalized UI styling decision before implementation starts:
 
 1. Use the **Warm Iron Light** theme from the UI Style Guide and Theme Tokens document.
 2. Use React Native `StyleSheet` plus centralized `theme.ts` tokens for v1.
