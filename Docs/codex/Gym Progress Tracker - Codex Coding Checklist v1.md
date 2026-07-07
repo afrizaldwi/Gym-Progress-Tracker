@@ -1,7 +1,7 @@
 # Gym Progress Tracker — Codex Coding Checklist v1
 
 **Document Status:** Draft v1  
-**Source Documents:** Requirement Document, PRD and Codex Project Brief, System Design, Database Design, UI Flow and Screen Design, Component Design, Implementation Plan  
+**Source Documents:** Requirement Document, PRD and Codex Project Brief, System Design, Database Design, UI Flow and Screen Design, Component Design, Implementation Plan, UI Style Guide and Theme Tokens  
 **Target Version:** Version 1 MVP  
 **Target Platform:** Android standalone APK  
 **Purpose:** Step-by-step coding checklist and prompt plan for Codex-assisted implementation  
@@ -20,12 +20,23 @@ Use this document together with:
 ```text
 Gym Progress Tracker — PRD and Codex Project Brief v1
 Gym Progress Tracker — Implementation Plan v1
+Gym Progress Tracker — UI Style Guide and Theme Tokens v1
 Gym Progress Tracker — Requirement Document v1
 Gym Progress Tracker — System Design
 Gym Progress Tracker — Database Design
 Gym Progress Tracker — UI Flow and Screen Design
 Gym Progress Tracker — Component Design
 ```
+
+## Implementation Focus
+
+This checklist adds the finalized UI styling decision before implementation starts:
+
+1. Use the **Warm Iron Light** theme from the UI Style Guide and Theme Tokens document.
+2. Use React Native `StyleSheet` plus centralized `theme.ts` tokens for v1.
+3. Do not use Tailwind, NativeWind, or utility-class styling in v1 unless the project owner explicitly reopens this decision.
+4. Do not hardcode colors inside feature components.
+5. Create shared theme primitives before feature UI implementation.
 
 ---
 
@@ -75,8 +86,12 @@ Do not remove transaction safety.
 Do not replace local TextInput state with global parent state.
 Do not ignore the two-tier active workout locking model.
 Do not change the backup JSON format unless validators, transformers, and fixtures are updated in the same task.
+Do not use Tailwind, NativeWind, CSS utility classes, or UI styling frameworks in v1.
+Do not hardcode colors inside feature components. Use shared theme tokens from src/shared/theme/theme.ts.
+Do not introduce blue as the primary color.
+Do not use pure white #FFFFFF for surfaces or pure black #000000 for text.
 
-Keep the implementation offline-first, Android-first, TypeScript-first, and SQLite-backed.
+Keep the implementation offline-first, Android-first, TypeScript-first, SQLite-backed, and aligned with the Warm Iron Light theme.
 ```
 
 ---
@@ -143,16 +158,34 @@ Implementation requirements:
    - src/features/bodyRecords
    - src/features/backup
    - src/shared/components
+   - src/shared/theme
    - src/shared/utils
 3. Add placeholder index files only when useful.
 4. Do not implement feature logic yet.
-5. Keep the setup minimal and aligned with the approved design documents.
+5. Create the shared theme foundation from the UI Style Guide:
+   - src/shared/theme/theme.ts
+   - src/shared/theme/index.ts
+6. Implement Warm Iron Light tokens exactly:
+   - background #FAF7F2
+   - surface #FFFCF7
+   - textPrimary #1C1917
+   - primary #B45309
+   - surfaceMuted #F3EDE4
+   - border #E7DED3
+   - textSecondary #57534E
+   - textMuted #78716C
+   - success #16A34A
+   - danger #DC2626
+   - warning #D97706
+7. Keep the setup minimal and aligned with the approved design documents.
 
 Do not:
 - Add backend code.
 - Add auth libraries.
 - Add analytics/tracking packages.
 - Add UI libraries unless explicitly justified.
+- Add Tailwind, NativeWind, Tamagui, styled-components, or other styling frameworks in v1.
+- Use pure white #FFFFFF or pure black #000000 in theme tokens.
 
 Acceptance checks:
 - Project installs successfully.
@@ -177,7 +210,70 @@ Expo app can open a placeholder screen
 
 ---
 
-## 6. Phase 1 — Navigation Shell
+## 6. Phase 1 — Shared Theme and Base Components
+
+### 6.1 Goal
+
+Create the shared theme and base UI primitives before navigation and feature screens so the app does not drift into hardcoded styles.
+
+### 6.2 Codex Prompt: Implement Theme Tokens and Base UI Components
+
+```text
+Task: Implement Warm Iron Light theme tokens and base UI components
+
+Context:
+The app uses the UI Style Guide and Theme Tokens document. The design direction is a light, warm, minimal interface. Version 1 must use React Native StyleSheet plus centralized theme tokens. Do not use Tailwind, NativeWind, or utility-class styling.
+
+Files to inspect first:
+- src/shared/theme, if it exists
+- src/shared/components, if it exists
+- UI Style Guide and Theme Tokens document
+
+Implementation requirements:
+1. Create or update src/shared/theme/theme.ts with Warm Iron Light tokens.
+2. Export theme tokens from src/shared/theme/index.ts.
+3. Define color, spacing, radius, typography, and shadow/elevation tokens.
+4. Create base components if not present:
+   - AppButton
+   - AppTextInput
+   - AppCard
+5. Components must use StyleSheet.create and theme tokens.
+6. Button variants must include primary, secondary, danger, ghost.
+7. Do not hardcode colors inside these components except by referencing theme tokens.
+
+Do not:
+- Add Tailwind or NativeWind.
+- Use className for styling.
+- Use #FFFFFF as surface.
+- Use #000000 as textPrimary.
+- Add decorative colors beyond the theme/status tokens.
+
+Acceptance checks:
+- TypeScript passes.
+- Base components render without database dependencies.
+- Components import theme tokens from shared theme.
+- No new styling framework dependencies are added.
+
+Output expected:
+- Summary of theme files created
+- Summary of base components created
+- Any styling assumptions
+```
+
+### 6.3 Gate
+
+Do not proceed until:
+
+```text
+Theme tokens exist in src/shared/theme/theme.ts
+Base shared components use theme tokens
+No Tailwind/NativeWind dependency exists
+No feature component contains hardcoded project colors
+```
+
+---
+
+## 7. Phase 2 — Navigation Shell
 
 ### 6.1 Goal
 
@@ -243,7 +339,7 @@ Manual navigation smoke test
 
 ---
 
-## 7. Phase 2 — SQLite Foundation
+## 8. Phase 3 — SQLite Foundation
 
 ### 7.1 Goal
 
@@ -382,7 +478,7 @@ TypeScript passes
 
 ---
 
-## 8. Phase 3 — Shared Types, Validators, and Result Pattern
+## 9. Phase 4 — Shared Types, Validators, and Result Pattern
 
 ### 8.1 Goal
 
@@ -473,7 +569,7 @@ No feature creep fields added
 
 ---
 
-## 9. Phase 4 — Repository Layer
+## 10. Phase 5 — Repository Layer
 
 ### 9.1 Goal
 
@@ -706,7 +802,7 @@ No UI depends on fake persistence
 
 ---
 
-## 10. Phase 5 — WorkoutWriteQueue and Services
+## 11. Phase 6 — WorkoutWriteQueue and Services
 
 ### 10.1 Goal
 
@@ -791,7 +887,7 @@ No delayed persistence behavior
 
 ---
 
-## 11. Phase 6 — Active Workout State and Components
+## 12. Phase 7 — Active Workout State and Components
 
 ### 11.1 Goal
 
@@ -1012,7 +1108,7 @@ Manual add-set flow works with SQLite
 
 ---
 
-## 12. Phase 7 — Exercise Selection and Exercise Management
+## 13. Phase 8 — Exercise Selection and Exercise Management
 
 ### 12.1 Codex Prompt: Exercise Selection Screen
 
@@ -1093,7 +1189,7 @@ Exercise management does not break history
 
 ---
 
-## 13. Phase 8 — Workout History and Exercise History
+## 14. Phase 9 — Workout History and Exercise History
 
 ### 13.1 Codex Prompt: Workout History and Detail
 
@@ -1169,7 +1265,7 @@ No advanced analytics added
 
 ---
 
-## 14. Phase 9 — Bodyweight Tracking
+## 15. Phase 10 — Bodyweight Tracking
 
 ### 14.1 Codex Prompt: Body Record Screen
 
@@ -1225,7 +1321,7 @@ Collision transaction tested
 
 ---
 
-## 15. Phase 10 — Backup Export and Import
+## 16. Phase 11 — Backup Export and Import
 
 ### 15.1 Codex Prompt: Backup Export
 
@@ -1363,7 +1459,7 @@ Failed import rollback verified
 
 ---
 
-## 16. Phase 11 — UI Polish and Shared Components
+## 17. Phase 12 — UI Polish and Shared Components
 
 ### 16.1 Codex Prompt: Shared Components
 
@@ -1439,7 +1535,7 @@ No raw SQLite errors in user-facing UI
 
 ---
 
-## 17. Phase 12 — Testing and Hardening
+## 18. Phase 13 — Testing and Hardening
 
 ### 17.1 Codex Prompt: Repository Tests
 
@@ -1560,7 +1656,7 @@ Core flows tested on Android device if available
 
 ---
 
-## 18. Phase 13 — APK Build
+## 19. Phase 14 — APK Build
 
 ### 18.1 Codex Prompt: APK Build Preparation
 
@@ -1607,7 +1703,7 @@ Installable APK produced when running EAS build
 
 ---
 
-## 19. Suggested Commit Plan
+## 20. Suggested Commit Plan
 
 Use small commits. Suggested order:
 
@@ -1643,7 +1739,7 @@ feat: build app
 
 ---
 
-## 20. Review Checklist for Every Codex Diff
+## 21. Review Checklist for Every Codex Diff
 
 Before accepting a Codex diff, check:
 
@@ -1681,6 +1777,12 @@ Backup:
 - Does failed import preserve current data?
 - Are fixtures/tests updated if format changes?
 
+Styling:
+- Does styling use src/shared/theme/theme.ts tokens?
+- Did it avoid Tailwind/NativeWind/className styling?
+- Did it preserve Warm Iron Light colors?
+- Did it avoid pure white #FFFFFF surfaces and pure black #000000 text?
+
 User experience:
 - Are destructive actions confirmed?
 - Are error messages friendly?
@@ -1689,7 +1791,7 @@ User experience:
 
 ---
 
-## 21. Red Flags When Reviewing Codex Output
+## 22. Red Flags When Reviewing Codex Output
 
 Reject or revise the diff if you see:
 
@@ -1710,13 +1812,17 @@ Reject or revise the diff if you see:
 - Timer useEffect with [] dependency while using interval/AppState.
 - AppState listener without remove() cleanup.
 - setInterval without clearInterval cleanup.
+- Tailwind, NativeWind, className styling, or new styling framework added.
+- Hardcoded feature colors instead of theme tokens.
+- Blue primary color introduced.
+- Pure white #FFFFFF surface or pure black #000000 text introduced.
 - Import deletes current data before validation.
 - Import transaction missing rollback behavior.
 ```
 
 ---
 
-## 22. First Codex Task to Run
+## 23. First Codex Task to Run
 
 Recommended first task:
 
@@ -1734,7 +1840,7 @@ Do not start with the active workout screen. The active workout screen depends o
 
 ---
 
-## 23. Summary
+## 24. Summary
 
 This checklist is designed to keep Codex productive and controlled.
 
@@ -1757,3 +1863,36 @@ The most important implementation risks are already known:
 - Backup import partial replacement.
 
 Each Codex task should protect these decisions instead of reopening them.
+
+---
+
+## Styling Decision Addendum
+
+The project owner has chosen **not** to use Tailwind or NativeWind for v1.
+
+Accepted styling stack:
+
+```text
+React Native StyleSheet
+Centralized src/shared/theme/theme.ts tokens
+Warm Iron Light palette
+Shared base components
+```
+
+Rejected for v1:
+
+```text
+Tailwind CSS
+NativeWind
+Utility-class styling
+Blue primary color
+Pure white surfaces
+Pure black text
+Feature-level hardcoded colors
+```
+
+Reason:
+
+```text
+The MVP needs predictable, simple, token-based styling that Codex can follow safely while the implementation focuses on SQLite safety, active workout performance, and offline-first behavior.
+```

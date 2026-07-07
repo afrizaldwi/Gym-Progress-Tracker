@@ -33,7 +33,7 @@ Therefore, this document focuses heavily on:
 
 This is not a visual styling document. It defines component responsibilities, data ownership, state boundaries, props, events, and render behavior.
 
-## Revision Focus
+## Implementation Focus
 
 Component Design keeps the v1 architecture and fixes React Native lifecycle and event-handling risks that could cause production bugs:
 

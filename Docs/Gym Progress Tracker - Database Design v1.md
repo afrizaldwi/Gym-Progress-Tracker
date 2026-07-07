@@ -32,17 +32,17 @@ Version 1 is local-only. There is no backend, login, cloud sync, or multi-user d
 
 ---
 
-## 2. Corrections from Database Design v1.1
+## 2. Corrections from Design Review
 
-Database Design v1.1 fixed the major architecture problems, but three runtime-level issues remained. makes these corrections:
+The previous database review fixed the major architecture problems, but three runtime-level issues remained. This document makes these corrections:
 
-| Area | v1.1 Weakness | Correction |
+| Area | Previous Weakness | Correction |
 |---|---|---|
 | Exercise block reorder | Direct swaps can violate immediate `UNIQUE(workout_id, exercise_order)`. | Keep the unique constraint and require positive parking-value reorder transactions. |
 | Body records | `UNIQUE(record_date)` was accidentally missing. | Restore one bodyweight record per date at the database level. |
 | Set deletion | Deleting Set 2 could leave visible gaps such as `1, 3, 4`. | Require delete-and-resequence inside one safe transaction. |
 
-The v1.1 corrections remain active: backup transformers, historical backup fixtures, single-active-workout partial unique index, immediate write serialization, transactional set insertion, repeated exercise blocks, and `workout_sets` referencing `workout_exercises.id`.
+The approved corrections remain active: backup transformers, historical backup fixtures, single-active-workout partial unique index, immediate write serialization, transactional set insertion, repeated exercise blocks, and `workout_sets` referencing `workout_exercises.id`.
 
 ---
 
@@ -97,7 +97,7 @@ app_meta
   independent internal table
 ```
 
-### 4.3 Important v1.1 relationship change
+### 4.3 Important relationship change
 
 `workout_sets` must reference `workout_exercises.id`.
 
@@ -1102,7 +1102,7 @@ Rules:
 
 ### 15.3 Mandatory backup fixtures
 
-Required for v1.1:
+Required for this design:
 
 ```text
 src/features/backup/fixtures/
@@ -1583,7 +1583,7 @@ Mitigation:
 
 ## 24. Conclusion
 
-Database Design is a stronger foundation than v1.1 because it fixes additional runtime integrity traps before UI design depends on them.
+Database Design is a stronger foundation than the previous draft because it fixes additional runtime integrity traps before UI design depends on them.
 
 The most important improvements are:
 
