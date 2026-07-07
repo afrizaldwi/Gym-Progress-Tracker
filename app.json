@@ -2,6 +2,7 @@
   "expo": {
     "name": "gym-progress-tracker",
     "slug": "gym-progress-tracker",
+    "scheme": "gym-progress-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -26,6 +27,13 @@
       "eas": {
         "projectId": "738733ee-2f95-4937-be74-d22da94d61ae"
       }
-    }
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "plugins": [
+      "expo-router",
+      "@react-native-vector-icons/material-design-icons"
+    ]
   }
 }
