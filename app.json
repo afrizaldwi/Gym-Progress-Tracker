@@ -34,7 +34,8 @@
     "plugins": [
       "expo-router",
       "@react-native-vector-icons/material-design-icons",
-      "expo-sqlite"
+      "expo-sqlite",
+      "@react-native-community/datetimepicker"
     ]
   }
 }
