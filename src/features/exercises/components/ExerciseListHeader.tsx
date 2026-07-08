@@ -14,7 +14,6 @@ import {
 } from '../utils/exerciseListFilters';
 
 type ExerciseListHeaderProps = {
-  placeholderMessage: string | null;
   searchText: string;
   selectedMuscleGroup: MuscleGroupFilter;
   onAddCustomExercise(): void;
@@ -23,7 +22,6 @@ type ExerciseListHeaderProps = {
 };
 
 export function ExerciseListHeader({
-  placeholderMessage,
   searchText,
   selectedMuscleGroup,
   onAddCustomExercise,
@@ -47,12 +45,6 @@ export function ExerciseListHeader({
           <Text style={styles.addButtonText}>Add Custom Exercise</Text>
         </Pressable>
       </View>
-
-      {placeholderMessage ? (
-        <View style={styles.placeholderBanner}>
-          <Text style={styles.placeholderText}>{placeholderMessage}</Text>
-        </View>
-      ) : null}
 
       <TextInput
         autoCapitalize="none"
@@ -136,17 +128,6 @@ const styles = StyleSheet.create({
     color: theme.colors.surface,
     fontSize: theme.typography.body,
     fontWeight: '700',
-  },
-  placeholderBanner: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    padding: theme.spacing.md,
-  },
-  placeholderText: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.caption,
   },
   searchInput: {
     backgroundColor: theme.colors.surface,

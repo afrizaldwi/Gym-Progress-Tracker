@@ -9,3 +9,9 @@ export type Exercise = {
   name: string;
   updatedAt: string;
 };
+
+export type CustomExerciseInput = {
+  equipment: string | null;
+  muscleGroup: string;
+  name: string;
+};

@@ -14,6 +14,19 @@ export const muscleGroupFilters = [
 
 export type MuscleGroupFilter = (typeof muscleGroupFilters)[number];
 
+export const exerciseMuscleGroupOptions = [
+  'Chest',
+  'Back',
+  'Shoulder',
+  'Legs',
+  'Biceps',
+  'Triceps',
+  'Core',
+  'Other',
+] as const;
+
+export type ExerciseMuscleGroup = (typeof exerciseMuscleGroupOptions)[number];
+
 export function filterExercises(
   exercises: Exercise[],
   searchText: string,
