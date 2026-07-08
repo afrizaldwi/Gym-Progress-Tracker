@@ -16,6 +16,15 @@ Use those docs as the source of truth. Do not duplicate large sections from them
 ## Working rules
 - Inspect existing files before editing.
 - Keep changes small, focused, and easy to review.
+- Keep each file focused on one clear responsibility.
+- Screen files should mainly coordinate data loading, local state, event handlers, and high-level composition.
+- Move presentational UI sections into feature-local components when a screen starts doing too much.
+- Move pure logic such as filtering, grouping, formatting, validation, and option lists into feature-local utilities when reused or when it keeps screens easier to read.
+- Repository files should contain data access and data integrity rules, not UI behavior.
+- Hook files should coordinate state and repository calls, not render UI.
+- Prefer feature-local files before creating shared abstractions.
+- Do not split tiny one-use code just to reduce line count.
+- Do not create generic abstractions unless there are at least two real call sites.
 - Do not add new dependencies unless clearly necessary.
 - Do not change app scope beyond v1.
 - Preserve offline-first behavior.
