@@ -1,22 +1,21 @@
-import { useMemo, useState } from 'react';
-import DateTimePicker, {
-  type DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
+import { useState } from 'react';
 import {
   Alert,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
 import { theme } from '../../shared/theme';
 import { AppScreen } from '../../shared/components/AppScreen';
+import { BodyRecordForm } from './components/BodyRecordForm';
+import { BodyRecordRow } from './components/BodyRecordRow';
+import { EmptyState } from './components/EmptyState';
 import { useBodyRecords } from './hooks/useBodyRecords';
 import type { BodyRecord, BodyRecordInput } from './types';
+import { formatDateOnly } from './utils/dateFormatting';
 import {
   type BodyRecordFormValues,
   validateBodyRecordForm,
@@ -213,18 +212,13 @@ export function BodyRecordsScreen() {
           isDatePickerVisible={isDatePickerVisible}
           onCancel={resetForm}
           onChange={setFormValues}
-          onDatePickerChange={(event, selectedDate) => {
-            setIsDatePickerVisible(false);
-
-            if (event.type !== 'set' || !selectedDate) {
-              return;
-            }
-
+          onDateChange={(recordDate) => {
             setFormValues((currentValues) => ({
               ...currentValues,
-              recordDate: formatDateOnly(selectedDate),
+              recordDate,
             }));
           }}
+          onDatePickerVisibilityChange={setIsDatePickerVisible}
           onOpenDatePicker={() => setIsDatePickerVisible(true)}
           onSubmit={() => {
             void handleSubmit().catch(() => undefined);
@@ -266,262 +260,6 @@ export function BodyRecordsScreen() {
   );
 }
 
-function BodyRecordForm({
-  errors,
-  isEditing,
-  isSaving,
-  isDatePickerVisible,
-  onCancel,
-  onChange,
-  onDatePickerChange,
-  onOpenDatePicker,
-  onSubmit,
-  primaryActionLabel,
-  title,
-  values,
-}: {
-  errors: FormErrors;
-  isEditing: boolean;
-  isSaving: boolean;
-  isDatePickerVisible: boolean;
-  onCancel(): void;
-  onChange(values: BodyRecordFormValues): void;
-  onDatePickerChange(event: DateTimePickerEvent, selectedDate?: Date): void;
-  onOpenDatePicker(): void;
-  onSubmit(): void;
-  primaryActionLabel: string;
-  title: string;
-  values: BodyRecordFormValues;
-}) {
-  return (
-    <View style={styles.formCard}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <DatePickerField
-        error={errors.recordDate}
-        isPickerVisible={isDatePickerVisible}
-        onChange={onDatePickerChange}
-        onOpen={onOpenDatePicker}
-        value={values.recordDate}
-      />
-      <AppTextInput
-        error={errors.bodyWeightText}
-        keyboardType="decimal-pad"
-        label="Body weight (kg)"
-        onChangeText={(bodyWeightText) =>
-          onChange({ ...values, bodyWeightText })
-        }
-        placeholder="72.5"
-        value={values.bodyWeightText}
-      />
-      <AppTextInput
-        label="Notes"
-        multiline
-        onChangeText={(notesText) => onChange({ ...values, notesText })}
-        placeholder="Optional"
-        value={values.notesText}
-      />
-      <View style={styles.actionRow}>
-        {isEditing ? (
-          <AppButton
-            disabled={isSaving}
-            label="Cancel"
-            onPress={onCancel}
-            variant="secondary"
-          />
-        ) : null}
-        <AppButton
-          disabled={isSaving}
-          label={isSaving ? 'Saving...' : primaryActionLabel}
-          onPress={onSubmit}
-          variant="primary"
-        />
-      </View>
-    </View>
-  );
-}
-
-function DatePickerField({
-  error,
-  isPickerVisible,
-  onChange,
-  onOpen,
-  value,
-}: {
-  error?: string;
-  isPickerVisible: boolean;
-  onChange(event: DateTimePickerEvent, selectedDate?: Date): void;
-  onOpen(): void;
-  value: string;
-}) {
-  return (
-    <View style={styles.inputGroup}>
-      <Text style={styles.inputLabel}>Date</Text>
-      <Pressable
-        onPress={onOpen}
-        style={[styles.dateField, error ? styles.inputError : null]}
-      >
-        <Text style={styles.dateFieldText}>{value}</Text>
-        <Text style={styles.dateFieldAction}>Pick date</Text>
-      </Pressable>
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
-      {isPickerVisible ? (
-        <DateTimePicker
-          mode="date"
-          onChange={onChange}
-          value={dateOnlyToLocalDate(value)}
-        />
-      ) : null}
-    </View>
-  );
-}
-
-function AppTextInput({
-  error,
-  label,
-  ...textInputProps
-}: {
-  error?: string;
-  label: string;
-} & React.ComponentProps<typeof TextInput>) {
-  return (
-    <View style={styles.inputGroup}>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <TextInput
-        {...textInputProps}
-        placeholderTextColor={theme.colors.textMuted}
-        style={[styles.input, error ? styles.inputError : null, textInputProps.style]}
-      />
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
-    </View>
-  );
-}
-
-function AppButton({
-  disabled,
-  label,
-  onPress,
-  variant,
-}: {
-  disabled?: boolean;
-  label: string;
-  onPress(): void;
-  variant: 'danger' | 'primary' | 'secondary';
-}) {
-  const buttonStyle = useMemo(() => {
-    if (variant === 'primary') {
-      return styles.primaryButton;
-    }
-
-    if (variant === 'danger') {
-      return styles.dangerButton;
-    }
-
-    return styles.secondaryButton;
-  }, [variant]);
-
-  const textStyle = variant === 'secondary' ? styles.secondaryButtonText : styles.filledButtonText;
-
-  return (
-    <Pressable
-      disabled={disabled}
-      onPress={disabled ? undefined : onPress}
-      style={[styles.button, buttonStyle, disabled ? styles.disabledButton : null]}
-    >
-      <Text style={textStyle}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function EmptyState() {
-  return (
-    <View style={styles.emptyCard}>
-      <Text style={styles.emptyTitle}>No body records yet</Text>
-      <Text style={styles.emptyBody}>
-        Add your first body weight entry to start tracking changes.
-      </Text>
-    </View>
-  );
-}
-
-function BodyRecordRow({
-  isActive,
-  onDelete,
-  onEdit,
-  record,
-}: {
-  isActive: boolean;
-  onDelete(record: BodyRecord): void;
-  onEdit(record: BodyRecord): void;
-  record: BodyRecord;
-}) {
-  return (
-    <View style={[styles.recordCard, isActive ? styles.activeRecordCard : null]}>
-      <View style={styles.recordHeader}>
-        <View>
-          <Text style={styles.recordDate}>{record.recordDate}</Text>
-          <Text style={styles.metaText}>
-            Updated {formatLocalDateTime(record.updatedAt)}
-          </Text>
-        </View>
-        <Text style={styles.recordWeight}>{formatBodyWeight(record.bodyWeight)} kg</Text>
-      </View>
-      {record.notes ? <Text style={styles.notes}>{record.notes}</Text> : null}
-      <View style={styles.rowActions}>
-        <Pressable
-          disabled={isActive}
-          onPress={() => onEdit(record)}
-          style={styles.textAction}
-        >
-          <Text style={[styles.textActionText, isActive ? styles.disabledText : null]}>
-            Edit
-          </Text>
-        </Pressable>
-        <Pressable onPress={() => onDelete(record)} style={styles.textAction}>
-          <Text style={styles.deleteActionText}>Delete</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-function formatBodyWeight(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
-
-function formatDateOnly(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
-}
-
-function dateOnlyToLocalDate(value: string): Date {
-  const [year, month, day] = value.split('-').map(Number);
-
-  if (!year || !month || !day) {
-    return new Date();
-  }
-
-  return new Date(year, month - 1, day);
-}
-
-function formatLocalDateTime(value: string): string {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-
-  return `${year}-${month}-${day} ${hours}:${minutes}`;
-}
-
 const styles = StyleSheet.create({
   screenContent: {
     padding: 0,
@@ -537,96 +275,6 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   sectionTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.typography.body,
-    fontWeight: '700',
-  },
-  formCard: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    gap: theme.spacing.md,
-    padding: theme.spacing.md,
-  },
-  inputGroup: {
-    gap: theme.spacing.xs,
-  },
-  inputLabel: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
-  },
-  input: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    color: theme.colors.textPrimary,
-    fontSize: theme.typography.body,
-    minHeight: 44,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  inputError: {
-    borderColor: theme.colors.danger,
-  },
-  dateField: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-    minHeight: 44,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  dateFieldText: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.typography.body,
-    fontWeight: '700',
-  },
-  dateFieldAction: {
-    color: theme.colors.primary,
-    fontSize: theme.typography.caption,
-    fontWeight: '700',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    justifyContent: 'flex-end',
-  },
-  button: {
-    alignItems: 'center',
-    borderRadius: theme.radius.md,
-    justifyContent: 'center',
-    minHeight: 44,
-    minWidth: 112,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  primaryButton: {
-    backgroundColor: theme.colors.primary,
-  },
-  dangerButton: {
-    backgroundColor: theme.colors.danger,
-  },
-  secondaryButton: {
-    backgroundColor: theme.colors.surfaceMuted,
-  },
-  disabledButton: {
-    opacity: 0.55,
-  },
-  filledButtonText: {
-    color: theme.colors.surface,
-    fontSize: theme.typography.body,
-    fontWeight: '700',
-  },
-  secondaryButtonText: {
     color: theme.colors.textPrimary,
     fontSize: theme.typography.body,
     fontWeight: '700',
@@ -655,80 +303,8 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.lg,
     marginBottom: theme.spacing.sm,
   },
-  emptyCard: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    padding: theme.spacing.md,
-  },
-  emptyTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.typography.body,
-    fontWeight: '700',
-  },
-  emptyBody: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.caption,
-    marginTop: theme.spacing.xs,
-  },
-  recordCard: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    marginTop: theme.spacing.sm,
-    padding: theme.spacing.md,
-  },
-  activeRecordCard: {
-    borderColor: theme.colors.primary,
-  },
-  recordHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-  },
-  recordDate: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.typography.body,
-    fontWeight: '700',
-  },
-  recordWeight: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.typography.body,
-    fontWeight: '700',
-  },
   metaText: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
-  },
-  notes: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.body,
-    marginTop: theme.spacing.sm,
-  },
-  rowActions: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    justifyContent: 'flex-end',
-    marginTop: theme.spacing.sm,
-  },
-  textAction: {
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  textActionText: {
-    color: theme.colors.primary,
-    fontSize: theme.typography.body,
-    fontWeight: '700',
-  },
-  deleteActionText: {
-    color: theme.colors.danger,
-    fontSize: theme.typography.body,
-    fontWeight: '700',
-  },
-  disabledText: {
-    color: theme.colors.textMuted,
   },
 });
