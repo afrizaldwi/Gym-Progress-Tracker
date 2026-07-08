@@ -15,6 +15,7 @@ import { CustomExerciseForm } from './components/CustomExerciseForm';
 import { EmptyExerciseList } from './components/EmptyExerciseList';
 import { ExerciseListHeader } from './components/ExerciseListHeader';
 import { ExerciseListItem } from './components/ExerciseListItem';
+import { useExerciseRemoval } from './hooks/useExerciseRemoval';
 import { useExercises } from './hooks/useExercises';
 import type { CustomExerciseInput, Exercise } from './types';
 import {
@@ -33,9 +34,12 @@ type FormState =
 
 export function ExerciseListScreen() {
   const {
+    archiveUsedExercise,
     createCustomExercise,
+    deleteUnusedCustomExercise,
     error,
     exercises,
+    hasWorkoutHistory,
     isLoading,
     isSaving,
     refresh,
@@ -46,6 +50,11 @@ export function ExerciseListScreen() {
     useState<MuscleGroupFilter>('All');
   const [formState, setFormState] = useState<FormState | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const { confirmRemoveExercise } = useExerciseRemoval({
+    archiveUsedExercise,
+    deleteUnusedCustomExercise,
+    hasWorkoutHistory,
+  });
   const filteredExercises = useMemo(
     () => filterExercises(exercises, searchText, selectedMuscleGroup),
     [exercises, searchText, selectedMuscleGroup]
@@ -109,7 +118,12 @@ export function ExerciseListScreen() {
         ItemSeparatorComponent={ItemSeparator}
         SectionSeparatorComponent={SectionSeparator}
         renderItem={({ item }) => (
-          <ExerciseListItem exercise={item} onEdit={openEditForm} />
+          <ExerciseListItem
+            disabled={isSaving}
+            exercise={item}
+            onEdit={openEditForm}
+            onRemove={(exercise) => void confirmRemoveExercise(exercise)}
+          />
         )}
         renderSectionHeader={({ section }) => (
           <Text style={styles.sectionHeader}>{section.title}</Text>

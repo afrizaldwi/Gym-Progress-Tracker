@@ -5,9 +5,12 @@ import { createExerciseRepository } from '../data/exerciseRepository';
 import type { CustomExerciseInput, Exercise } from '../types';
 
 type UseExercisesResult = {
+  archiveUsedExercise(exerciseId: string): Promise<void>;
   createCustomExercise(input: CustomExerciseInput): Promise<Exercise>;
+  deleteUnusedCustomExercise(exerciseId: string): Promise<void>;
   error: Error | null;
   exercises: Exercise[];
+  hasWorkoutHistory(exerciseId: string): Promise<boolean>;
   isLoading: boolean;
   isSaving: boolean;
   refresh(): Promise<void>;
@@ -67,6 +70,23 @@ export function useExercises(): UseExercisesResult {
     void refresh();
   }, [refresh]);
 
+  const archiveUsedExercise = useCallback(
+    async (exerciseId: string) => {
+      setIsSaving(true);
+
+      try {
+        const repository = createExerciseRepository(db);
+        await repository.archiveUsedExercise(exerciseId);
+        await refresh();
+      } finally {
+        if (isMountedRef.current) {
+          setIsSaving(false);
+        }
+      }
+    },
+    [db, refresh]
+  );
+
   const createCustomExercise = useCallback(
     async (input: CustomExerciseInput) => {
       setIsSaving(true);
@@ -84,6 +104,32 @@ export function useExercises(): UseExercisesResult {
       }
     },
     [db, refresh]
+  );
+
+  const deleteUnusedCustomExercise = useCallback(
+    async (exerciseId: string) => {
+      setIsSaving(true);
+
+      try {
+        const repository = createExerciseRepository(db);
+        await repository.deleteUnusedCustomExercise(exerciseId);
+        await refresh();
+      } finally {
+        if (isMountedRef.current) {
+          setIsSaving(false);
+        }
+      }
+    },
+    [db, refresh]
+  );
+
+  const hasWorkoutHistory = useCallback(
+    async (exerciseId: string) => {
+      const repository = createExerciseRepository(db);
+
+      return repository.hasWorkoutHistory(exerciseId);
+    },
+    [db]
   );
 
   const updateCustomExercise = useCallback(
@@ -109,9 +155,12 @@ export function useExercises(): UseExercisesResult {
   );
 
   return {
+    archiveUsedExercise,
     createCustomExercise,
+    deleteUnusedCustomExercise,
     error,
     exercises,
+    hasWorkoutHistory,
     isLoading,
     isSaving,
     refresh,

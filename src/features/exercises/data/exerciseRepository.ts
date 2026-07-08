@@ -16,7 +16,10 @@ type ExerciseRow = {
 };
 
 export type ExerciseRepository = {
+  archiveUsedExercise(exerciseId: string): Promise<void>;
   createCustomExercise(input: CustomExerciseInput): Promise<Exercise>;
+  deleteUnusedCustomExercise(exerciseId: string): Promise<void>;
+  hasWorkoutHistory(exerciseId: string): Promise<boolean>;
   listActiveExercises(): Promise<Exercise[]>;
   updateCustomExercise(
     exerciseId: string,
@@ -63,6 +66,52 @@ INSERT INTO exercises (
       }
 
       return createdExercise;
+    },
+
+    async archiveUsedExercise(exerciseId) {
+      const now = new Date().toISOString();
+
+      await runInTransaction(db, async (tx) => {
+        const exercise = await findEditableCustomExercise(tx, exerciseId);
+        const hasHistory = await hasWorkoutHistoryByExerciseId(tx, exercise.id);
+
+        if (!hasHistory) {
+          throw new Error('Unused custom exercises can be deleted instead.');
+        }
+
+        await tx.runAsync(
+          `
+UPDATE exercises
+SET
+  is_archived = 1,
+  archived_at = ?,
+  updated_at = ?
+WHERE id = ?;
+`,
+          now,
+          now,
+          exercise.id
+        );
+      });
+    },
+
+    async deleteUnusedCustomExercise(exerciseId) {
+      await runInTransaction(db, async (tx) => {
+        const exercise = await findEditableCustomExercise(tx, exerciseId);
+        const hasHistory = await hasWorkoutHistoryByExerciseId(tx, exercise.id);
+
+        if (hasHistory) {
+          throw new Error(
+            'This custom exercise is used in workout history and must be archived instead.'
+          );
+        }
+
+        await tx.runAsync('DELETE FROM exercises WHERE id = ?;', exercise.id);
+      });
+    },
+
+    async hasWorkoutHistory(exerciseId) {
+      return hasWorkoutHistoryByExerciseId(db, exerciseId);
     },
 
     async listActiveExercises() {
@@ -137,6 +186,44 @@ WHERE id = ?;
       return updatedExercise;
     },
   };
+}
+
+async function findEditableCustomExercise(
+  db: AppDatabase,
+  exerciseId: string
+): Promise<Exercise> {
+  const exercise = await findById(db, exerciseId);
+
+  if (!exercise) {
+    throw new Error('Exercise was not found.');
+  }
+
+  if (!exercise.isCustom) {
+    throw new Error('Default exercises cannot be removed in version 1.');
+  }
+
+  if (exercise.isArchived) {
+    throw new Error('Archived exercises cannot be removed.');
+  }
+
+  return exercise;
+}
+
+async function hasWorkoutHistoryByExerciseId(
+  db: AppDatabase,
+  exerciseId: string
+): Promise<boolean> {
+  const row = await db.getFirstAsync<{ id: string }>(
+    `
+SELECT id
+FROM workout_exercises
+WHERE exercise_id = ?
+LIMIT 1;
+`,
+    exerciseId
+  );
+
+  return row !== null;
 }
 
 async function assertActiveNameIsAvailable(
