@@ -1,4 +1,5 @@
 import {
+  Alert,
   Pressable,
   RefreshControl,
   SectionList,
@@ -6,20 +7,62 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useMemo, useState } from 'react';
 
 import { theme } from '../../shared/theme';
 import { AppScreen } from '../../shared/components/AppScreen';
+import { CustomExerciseForm } from './components/CustomExerciseForm';
+import { EmptyExerciseList } from './components/EmptyExerciseList';
+import { ExerciseListHeader } from './components/ExerciseListHeader';
+import { ExerciseListItem } from './components/ExerciseListItem';
+import { useExerciseRemoval } from './hooks/useExerciseRemoval';
 import { useExercises } from './hooks/useExercises';
-import type { Exercise } from './types';
+import type { CustomExerciseInput, Exercise } from './types';
+import {
+  filterExercises,
+  type MuscleGroupFilter,
+} from './utils/exerciseListFilters';
 
 type ExerciseSection = {
   data: Exercise[];
   title: string;
 };
 
+type FormState =
+  | { mode: 'create'; exercise: null }
+  | { mode: 'edit'; exercise: Exercise };
+
 export function ExerciseListScreen() {
-  const { error, exercises, isLoading, refresh } = useExercises();
-  const sections = groupExercisesByMuscleGroup(exercises);
+  const {
+    archiveUsedExercise,
+    createCustomExercise,
+    deleteUnusedCustomExercise,
+    error,
+    exercises,
+    hasWorkoutHistory,
+    isLoading,
+    isSaving,
+    refresh,
+    updateCustomExercise,
+  } = useExercises();
+  const [searchText, setSearchText] = useState('');
+  const [selectedMuscleGroup, setSelectedMuscleGroup] =
+    useState<MuscleGroupFilter>('All');
+  const [formState, setFormState] = useState<FormState | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const { confirmRemoveExercise } = useExerciseRemoval({
+    archiveUsedExercise,
+    deleteUnusedCustomExercise,
+    hasWorkoutHistory,
+  });
+  const filteredExercises = useMemo(
+    () => filterExercises(exercises, searchText, selectedMuscleGroup),
+    [exercises, searchText, selectedMuscleGroup]
+  );
+  const sections = useMemo(
+    () => groupExercisesByMuscleGroup(filteredExercises),
+    [filteredExercises]
+  );
 
   if (isLoading && exercises.length === 0) {
     return (
@@ -44,14 +87,44 @@ export function ExerciseListScreen() {
 
   return (
     <AppScreen contentStyle={styles.screenContent}>
+      <CustomExerciseForm
+        errorMessage={formError}
+        exercise={formState?.exercise ?? null}
+        isSaving={isSaving}
+        mode={formState?.mode ?? 'create'}
+        visible={formState !== null}
+        onCancel={closeForm}
+        onSubmit={handleSaveExercise}
+      />
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.id}
-        ListEmptyComponent={<EmptyExerciseList />}
-        ListHeaderComponent={<ExerciseListHeader />}
+        ListEmptyComponent={
+          <EmptyExerciseList
+            hasExercises={exercises.length > 0}
+            searchText={searchText}
+            selectedMuscleGroup={selectedMuscleGroup}
+          />
+        }
+        ListHeaderComponent={
+          <ExerciseListHeader
+            searchText={searchText}
+            selectedMuscleGroup={selectedMuscleGroup}
+            onAddCustomExercise={openCreateForm}
+            onSearchTextChange={setSearchText}
+            onSelectMuscleGroup={setSelectedMuscleGroup}
+          />
+        }
         ItemSeparatorComponent={ItemSeparator}
         SectionSeparatorComponent={SectionSeparator}
-        renderItem={({ item }) => <ExerciseRow exercise={item} />}
+        renderItem={({ item }) => (
+          <ExerciseListItem
+            disabled={isSaving}
+            exercise={item}
+            onEdit={openEditForm}
+            onRemove={(exercise) => void confirmRemoveExercise(exercise)}
+          />
+        )}
         renderSectionHeader={({ section }) => (
           <Text style={styles.sectionHeader}>{section.title}</Text>
         )}
@@ -67,6 +140,59 @@ export function ExerciseListScreen() {
       />
     </AppScreen>
   );
+
+  function openCreateForm() {
+    setFormError(null);
+    setFormState({ mode: 'create', exercise: null });
+  }
+
+  function openEditForm(exercise: Exercise) {
+    if (!exercise.isCustom) {
+      Alert.alert(
+        'Default exercise',
+        'Default exercises cannot be edited in version 1. You can create a custom exercise instead.'
+      );
+      return;
+    }
+
+    setFormError(null);
+    setFormState({ mode: 'edit', exercise });
+  }
+
+  function closeForm() {
+    if (isSaving) {
+      return;
+    }
+
+    setFormError(null);
+    setFormState(null);
+  }
+
+  async function handleSaveExercise(input: CustomExerciseInput) {
+    if (!formState) {
+      return;
+    }
+
+    setFormError(null);
+
+    try {
+      if (formState.mode === 'create') {
+        await createCustomExercise(input);
+        Alert.alert('Exercise saved', 'Custom exercise added.');
+      } else {
+        await updateCustomExercise(formState.exercise.id, input);
+        Alert.alert('Exercise saved', 'Custom exercise updated.');
+      }
+
+      setFormState(null);
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'This exercise could not be saved. Please try again.';
+      setFormError(message);
+    }
+  }
 }
 
 function groupExercisesByMuscleGroup(exercises: Exercise[]): ExerciseSection[] {
@@ -85,34 +211,6 @@ function groupExercisesByMuscleGroup(exercises: Exercise[]): ExerciseSection[] {
   }));
 }
 
-function ExerciseListHeader() {
-  return (
-    <View style={styles.header}>
-      <Text style={styles.title}>Exercises</Text>
-    </View>
-  );
-}
-
-function EmptyExerciseList() {
-  return (
-    <View style={styles.emptyCard}>
-      <Text style={styles.emptyTitle}>No exercises found</Text>
-      <Text style={styles.emptyBody}>Active exercises will appear here after setup.</Text>
-    </View>
-  );
-}
-
-function ExerciseRow({ exercise }: { exercise: Exercise }) {
-  return (
-    <View style={styles.card}>
-      <Text style={styles.exerciseName}>{exercise.name}</Text>
-      {exercise.equipment ? (
-        <Text style={styles.exerciseEquipment}>{exercise.equipment}</Text>
-      ) : null}
-    </View>
-  );
-}
-
 function ItemSeparator() {
   return <View style={styles.separator} />;
 }
@@ -128,9 +226,6 @@ const styles = StyleSheet.create({
   listContent: {
     padding: theme.spacing.lg,
     paddingBottom: theme.spacing.xl,
-  },
-  header: {
-    marginBottom: theme.spacing.md,
   },
   sectionHeader: {
     backgroundColor: theme.colors.background,
@@ -160,40 +255,6 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontSize: theme.typography.body,
     fontWeight: '700',
-  },
-  emptyCard: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    padding: theme.spacing.md,
-  },
-  emptyTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.typography.body,
-    fontWeight: '700',
-  },
-  emptyBody: {
-    marginTop: theme.spacing.xs,
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.caption,
-  },
-  card: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    padding: theme.spacing.md,
-  },
-  exerciseName: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.typography.body,
-    fontWeight: '700',
-  },
-  exerciseEquipment: {
-    marginTop: theme.spacing.xs,
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.caption,
   },
   separator: {
     height: theme.spacing.sm,
